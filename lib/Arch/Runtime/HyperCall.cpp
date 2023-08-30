@@ -282,7 +282,7 @@ Memory *__remill_sync_hyper_call(State &state, Memory *mem,
       mem = __remill_aarch64_emulate_instruction(mem);
       break;
 
-    case SyncHyperCall::kAArch64Breakpoint: asm volatile("bkpt" :); break;
+    case SyncHyperCall::kAArch64Breakpoint: asm volatile("BRK #0" :); break;
 
 #elif REMILL_HYPERCALL_SPARC32 || REMILL_HYPERCALL_SPARC64
 

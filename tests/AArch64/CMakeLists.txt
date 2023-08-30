@@ -18,6 +18,16 @@ list(APPEND PROJECT_LIBRARIES GTest::gtest)
 enable_testing()
 enable_language(ASM)
 
+include_directories("/usr/lib/llvm-15/include")
+
+add_custom_command(
+  OUTPUT Expanded_Tests.S
+  COMMAND ${CMAKE_BC_COMPILER} -E -o Expanded_Tests.S ${CMAKE_SOURCE_DIR}/tests/AArch64/Tests.S
+  DEPENDS Tests.S
+  COMMENT "Expanding macros in Tests.S"
+  VERBATIM
+)
+
 add_executable(lift-aarch64-tests
   EXCLUDE_FROM_ALL
   Lift.cpp

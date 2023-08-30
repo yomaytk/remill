@@ -126,7 +126,7 @@ endif()
 # Configuration options for semantics
 #
 option(REMILL_BARRIER_AS_NOP "Remove compiler barriers (inline assembly) in semantics" OFF)
-option(REMILL_BUILD_SPARC32_RUNTIME "Build the Runtime for SPARC32. Turn this off if you have include errors with <bits/c++config.h>, or read the README for a fix" ON)
+option(REMILL_BUILD_SPARC32_RUNTIME "Build the Runtime for SPARC32. Turn this off if you have include errors with <bits/c++config.h>, or read the README for a fix" OFF)
 
 #
 # target settings
@@ -358,8 +358,11 @@ if(REMILL_ENABLE_TESTING)
     add_subdirectory(tests/X86)
   endif()
 
-  if(REMILL_ENABLE_TESTING_AARCH64)
-    message(STATUS "aarch64 tests enabled")
-    add_subdirectory(tests/AArch64)
-  endif()
+  # if(REMILL_ENABLE_TESTING_AARCH64)
+  message(STATUS "aarch64 tests enabled")
+  add_subdirectory(tests/AArch64)
+  # endif()
+
+  message(STATUS "lifting aarch64 enabled")
+  add_subdirectory(tests/Lifting)
 endif()

@@ -1,6 +1,6 @@
 # Choose your LLVM version
 ARG LLVM_VERSION=16
-ARG ARCH=amd64
+ARG ARCH=aarch64
 ARG UBUNTU_VERSION=22.04
 ARG DISTRO_BASE=ubuntu${UBUNTU_VERSION}
 ARG BUILD_BASE=ubuntu:${UBUNTU_VERSION}
@@ -13,16 +13,18 @@ FROM ${BUILD_BASE} as base
 # Build-time dependencies go here
 # See here for full list of those dependencies
 # https://github.com/lifting-bits/cxx-common/blob/master/docker/Dockerfile.ubuntu.vcpkg
-FROM trailofbits/cxx-common-vcpkg-builder-ubuntu:${UBUNTU_VERSION} as deps
+FROM trailofbits/cxx-common-vcpkg-builder-ubuntu:${UBUNTU_VERSION}_arm64 as deps
 ARG UBUNTU_VERSION
 ARG ARCH
 ARG LLVM_VERSION
 ARG LIBRARIES
 
-RUN apt-get update && \
-    apt-get install -qqy python3 python3-pip libc6-dev wget liblzma-dev zlib1g-dev curl git build-essential ninja-build libselinux1-dev libbsd-dev ccache pixz xz-utils make rpm && \
-    if [ "$(uname -m)" = "x86_64" ]; then dpkg --add-architecture i386 && apt-get update && apt-get install -qqy gcc-multilib g++-multilib zip zlib1g-dev:i386; fi && \
-    rm -rf /var/lib/apt/lists/*
+RUN date
+RUN apt update
+
+RUN apt install -qqy python3 python3-pip libc6-dev wget liblzma-dev zlib1g-dev curl git build-essential ninja-build libselinux1-dev libbsd-dev ccache pixz xz-utils make rpm
+
+RUN rm -rf /var/lib/apt/lists/*
 
 # Source code build
 FROM deps as build

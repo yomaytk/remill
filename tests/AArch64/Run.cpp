@@ -38,7 +38,7 @@
 
 #include "remill/Arch/AArch64/Runtime/State.h"
 #include "remill/Arch/Runtime/Runtime.h"
-#include "tests/AArch64/Test.h"
+#include "Test.h"
 
 DECLARE_string(arch);
 DECLARE_string(os);
@@ -605,7 +605,6 @@ inline static bool operator!=(const T &a, const T &b) {
 static void RunWithFlags(const test::TestInfo *info, NZCV flags,
                          std::string desc, uint64_t arg1, uint64_t arg2,
                          uint64_t arg3) {
-
   DLOG(INFO) << "Testing instruction: " << info->test_name << ": " << desc;
   if (sigsetjmp(gUnsupportedInstrBuf, true)) {
     DLOG(INFO) << "Unsupported instruction " << info->test_name;
@@ -757,7 +756,10 @@ static void RunWithFlags(const test::TestInfo *info, NZCV flags,
     }
 
     EXPECT_TRUE(!"Lifted and native stacks did not match.");
+  } else {
+    EXPECT_TRUE(!"gLifteStack is equal to the gNativeStack!!!!!!!!");
   }
+
 }
 
 TEST_P(InstrTest, SemanticsMatchNative) {

@@ -21,13 +21,13 @@ SCRIPTS_DIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
 SRC_DIR=$( cd "$( dirname "${SCRIPTS_DIR}" )" && pwd )
 DOWNLOAD_DIR="$( cd "$( dirname "${SRC_DIR}" )" && pwd )/lifting-bits-downloads"
 CURR_DIR=$( pwd )
-BUILD_DIR="${CURR_DIR}/remill-build"
+BUILD_DIR="${CURR_DIR}/build3"
 INSTALL_DIR=/usr/local
 LLVM_VERSION=llvm-16
 OS_VERSION=
 ARCH_VERSION=
 BUILD_FLAGS=
-CXX_COMMON_VERSION="0.3.1"
+CXX_COMMON_VERSION="0.5.0"
 CREATE_PACKAGES=true
 
 # There are pre-build versions of various libraries for specific
@@ -232,6 +232,7 @@ function Configure
         -DCMAKE_VERBOSE_MAKEFILE=True \
         -DCMAKE_TOOLCHAIN_FILE="${DOWNLOAD_DIR}/${LIBRARY_VERSION}/scripts/buildsystems/vcpkg.cmake" \
         -DVCPKG_TARGET_TRIPLET="${VCPKG_TARGET_TRIPLET}" \
+        -DREMILL_BUILD_SPARC32_RUNTIME=OFF \
         ${BUILD_FLAGS} \
         "${SRC_DIR}"
   ) || exit $?
@@ -423,6 +424,10 @@ function main
     echo "[x] Build aborted."
     exit 1
   fi
+
+  chown -R $(whoami):$(whoami) $BUILD_DIR
+  chmod -R u+x $BUILD_DIR
+  cp ${SRC_DIR}/tests/Lifting/lift.sh ${BUILD_DIR}/tests/Lifting/lift.sh
 
   return $?
 }

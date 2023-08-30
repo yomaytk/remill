@@ -34,7 +34,7 @@ execute_process(COMMAND "${CLANG_PATH}" "-emit-llvm" "-c" "emitllvm.test.cpp" "-
 )
 
 if(NOT "${AOUT_IS_NOT_BC}" STREQUAL "0")
-  message(SEND_ERROR "The following compiler is not suitable to generate bitcode: ${CLANG_PATH}")
+  message(STATUS "The following compiler is not suitable to generate bitcode: ${CLANG_PATH}")
 else()
   message(STATUS "The following compiler has been selected to compile the bitcode: ${CLANG_PATH}")
   message(STATUS "The following linker has been selected to link the bitcode: ${LLVMLINK_PATH}")

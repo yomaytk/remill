@@ -18,9 +18,9 @@ add_library(
   test-runner
   STATIC
   TestRunner.cpp
-  "${TEST_RUNNER_INCLUDE_DIR}/test_runner/TestRunner.h"
-  "${TEST_RUNNER_INCLUDE_DIR}/test_runner/TestOutputSpec.h"
 )
+
+include_directories("/usr/lib/llvm-15/include")
 
 target_link_libraries(
   test-runner
