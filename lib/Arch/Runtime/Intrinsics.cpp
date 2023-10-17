@@ -15,7 +15,7 @@
  */
 
 #include "remill/Arch/Runtime/Intrinsics.h"
-
+#include "remill/Arch/Runtime/Types.h"
 #include "remill/Arch/Runtime/Operators.h"
 
 #define USED(sym) __remill_mark_as_used(reinterpret_cast<const void *>(&sym))
@@ -120,6 +120,7 @@ extern "C" [[gnu::used]] void __remill_intrinsics(void) {
 
   USED(__remill_async_hyper_call);
   USED(__remill_sync_hyper_call);
+  USED(__remill_syscall_tranpoline_call);
 
   USED(__remill_undefined_8);
   USED(__remill_undefined_16);

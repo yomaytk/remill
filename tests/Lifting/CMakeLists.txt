@@ -18,22 +18,28 @@ list(APPEND PROJECT_LIBRARIES GTest::gtest)
 enable_testing()
 enable_language(ASM)
 
-include_directories("/usr/lib/llvm-15/include")
+include_directories("/usr/lib/llvm-16/include")
 
 add_executable(lifting_target_aarch64
   EXCLUDE_FROM_ALL
+  binary/loader.cpp
   Lift.cpp
-  TARGET/easy_cal.S
 )
 
 set_target_properties(lifting_target_aarch64 PROPERTIES
   POSITION_INDEPENDENT_CODE ON
-  COMPILE_FLAGS "-fPIC -pie"
+  COMPILE_FLAGS "-O0 -fPIC -pie"
 )
 
 target_compile_options(lifting_target_aarch64
   PRIVATE ${AARCH64_TEST_FLAGS}
   -DIN_TEST_GENERATOR
+)
+
+target_link_libraries(
+  lifting_target_aarch64 
+  PRIVATE
+  bfd
 )
 
 file(GLOB AARCH64_TEST_FILES

@@ -425,8 +425,6 @@ function main
     exit 1
   fi
 
-  chown -R $(whoami):$(whoami) $BUILD_DIR
-  chmod -R u+x $BUILD_DIR
   cp ${SRC_DIR}/tests/Lifting/lift.sh ${BUILD_DIR}/tests/Lifting/lift.sh
 
   return $?

@@ -23,6 +23,7 @@
 #include "remill/Arch/Runtime/Float.h"
 #include "remill/Arch/Runtime/Intrinsics.h"
 #include "remill/Arch/Runtime/Operators.h"
+#include "remill/Arch/Runtime/Types.h"
 #include "remill/Arch/AArch64/Runtime/State.h"
 #include "remill/Arch/AArch64/Runtime/Types.h"
 #include "remill/Arch/AArch64/Runtime/Operators.h"

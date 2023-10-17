@@ -1,8 +1,6 @@
 #define SLENGTH 100
 #define NUMS 1000
 
-char ss[] = "hello, world";
-
 void write_stdout(char *str, unsigned long length) {
      __asm__ volatile(
         "mov x2, x1;"          // x2 = length

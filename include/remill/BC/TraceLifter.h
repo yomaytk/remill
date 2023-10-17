@@ -98,6 +98,8 @@ class TraceLifter {
   bool
   Lift(uint64_t addr,
        std::function<void(uint64_t, llvm::Function *)> callback = NullCallback);
+    
+  void SetEntryPoint(std::string &entry_func_name);
 
  private:
   TraceLifter(void) = delete;

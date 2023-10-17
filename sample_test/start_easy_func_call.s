@@ -1,11 +1,11 @@
 .global _start
 .section .text
-.extern easy_cal
+.extern main
 
 _start:
-        bl      easy_cal        // call easy_cal
-
+        bl      main        // call easy_func
         // exit system call
         mov     x8, #93         // syscall: exit
-        mov     x0, #0          // exit status
+        mov     x8, x0
+	ret
         svc     #0              // make syscall

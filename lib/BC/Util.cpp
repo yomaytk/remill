@@ -411,7 +411,7 @@ LoadArchSemantics(const Arch *arch,
   if (!path)
     LOG(FATAL) << "Cannot find path to " << arch_name
                << " semantics bitcode file.";
-
+  
   DLOG(INFO) << "Loading " << arch_name << " semantics from file " << *path;
   auto module = LoadModuleFromFile(arch->context, *path);
   arch->PrepareModule(module);

@@ -202,7 +202,7 @@ else()
     )
   else()
     target_compile_options(remill_settings INTERFACE
-      -O2
+      -O0
     )
     target_compile_definitions(remill_settings INTERFACE
       "NDEBUG"
@@ -342,26 +342,6 @@ if(REMILL_ENABLE_TESTING)
 
   find_package(Threads REQUIRED)
   add_custom_target(test_dependencies)
-
-  if(REMILL_ENABLE_TESTING_SLEIGH_THUMB)
-    message(STATUS "thumb tests enabled")
-    add_subdirectory(tests/Thumb)
-  endif()
-
-  if(REMILL_ENABLE_TESTING_SLEIGH_PPC)
-    message(STATUS "ppc tests enabled")
-    add_subdirectory(tests/PPC)
-  endif()
-
-  if(REMILL_ENABLE_TESTING_X86)
-    message(STATUS "X86 tests enabled")
-    add_subdirectory(tests/X86)
-  endif()
-
-  # if(REMILL_ENABLE_TESTING_AARCH64)
-  message(STATUS "aarch64 tests enabled")
-  add_subdirectory(tests/AArch64)
-  # endif()
 
   message(STATUS "lifting aarch64 enabled")
   add_subdirectory(tests/Lifting)

@@ -19,6 +19,7 @@
 #include "Int.h"
 #include "TypeTraits.h"
 #include "Float.h"
+#include "Definitions.h"
 
 #if defined(__GNUG__) && !defined(__clang__)
 #  define COMPILING_WITH_GCC 1
@@ -28,8 +29,6 @@
 
 #pragma clang diagnostic push
 #pragma clang diagnostic fatal "-Wpadded"
-
-#include "remill/Arch/Runtime/Definitions.h"
 
 struct State;
 struct Memory;
@@ -55,6 +54,9 @@ typedef int16_t addr_diff_t;
 #else
 # error "Invalid address size in bits"
 #endif
+
+// Entry function of the original ELF
+typedef addr_t (*EntryFunc)(State *state, addr_t pc, Memory *memory);
 
 // Note: We are re-defining the `std::is_signed` type trait because we can't
 //       always explicitly specialize it inside of the `std` namespace.

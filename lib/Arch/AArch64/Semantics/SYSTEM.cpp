@@ -16,9 +16,9 @@
 
 namespace {
 
-DEF_SEM(CallSupervisor, I32 imm) {
+DEF_SEM(CallSupervisor, I32, R64W) {
   HYPER_CALL = AsyncHyperCall::kAArch64SupervisorCall;
-  HYPER_CALL_VECTOR = Read(imm);
+  __remill_syscall_tranpoline_call(state, memory);
   return memory;
 }
 

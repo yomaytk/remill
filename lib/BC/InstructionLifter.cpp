@@ -171,7 +171,8 @@ LiftStatus InstructionLifter::LiftIntoBlock(Instruction &arch_inst,
   auto arg_num = 2U;
 
   for (auto &op : arch_inst.operands) {
-    if (!(arg_num < isel_func_type->getNumParams())) {
+    auto num_params = isel_func_type->getNumParams();
+    if (!(arg_num < num_params)) {
       return kLiftedMismatchedISEL;
     }
 
@@ -319,7 +320,7 @@ InstructionLifter::LoadRegAddress(llvm::BasicBlock *block,
   //            a hyper call to read an unknown register, or a lifting failure,
   //            with a more elaborate status value returned.
   LOG(ERROR) << "Could not locate variable or register " << reg_name_;
-
+  
   return {new llvm::GlobalVariable(*module, impl->word_type, false,
                                    llvm::GlobalValue::ExternalLinkage,
                                    llvm::UndefValue::get(impl->word_type),

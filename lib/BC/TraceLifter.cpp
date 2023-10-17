@@ -16,6 +16,7 @@
 
 #include <glog/logging.h>
 #include <llvm/IR/Instructions.h>
+#include <llvm/IR/Type.h>
 #include <remill/Arch/Instruction.h>
 #include <remill/BC/IntrinsicTable.h>
 #include <remill/BC/TraceLifter.h>
@@ -25,7 +26,7 @@
 #include <set>
 #include <sstream>
 
-#include "InstructionLifter.h"
+#include "remill/Arch/Arch.h"
 
 namespace remill {
 
@@ -91,6 +92,28 @@ class TraceLifter::Impl {
   //       within `module`.
   llvm::Function *GetLiftedTraceDefinition(uint64_t addr);
 
+  // Set entry function pointer
+  llvm::GlobalVariable *SetEntryPoint(std::string &entry_func_name) {
+    
+    llvm::Function *entry_func = module->getFunction(entry_func_name);
+    // no defined entry function
+    if (!func) {
+      printf("[ERROR] Entry function is not defined. func_name: %s\n", entry_func_name.c_str());
+      abort();
+    }
+    llvm::GlobalVariable *g_entry_func = new llvm::GlobalVariable(
+      *module, 
+      entry_func->getType(),
+      false, 
+      llvm::GlobalVariable::ExternalLinkage, 
+      entry_func, 
+      g_entry_func_name
+    );
+    g_entry_func->setAlignment(llvm::MaybeAlign(8));
+    return g_entry_func;
+
+  }
+
   llvm::BasicBlock *GetOrCreateBlock(uint64_t block_pc) {
     auto &block = blocks[block_pc];
     if (!block) {
@@ -147,6 +170,7 @@ class TraceLifter::Impl {
   DecoderWorkList trace_work_list;
   DecoderWorkList inst_work_list;
   std::map<uint64_t, llvm::BasicBlock *> blocks;
+  std::string g_entry_func_name;
 };
 
 TraceLifter::Impl::Impl(const Arch *arch_, TraceManager *manager_)
@@ -162,7 +186,8 @@ TraceLifter::Impl::Impl(const Arch *arch_, TraceManager *manager_)
       block(nullptr),
       switch_inst(nullptr),
       // TODO(Ian): The trace lfiter is not supporting contexts
-      max_inst_bytes(arch->MaxInstructionSize(arch->CreateInitialContext())) {
+      max_inst_bytes(arch->MaxInstructionSize(arch->CreateInitialContext())),
+      g_entry_func_name("__g_entry_func") {
 
   inst_bytes.reserve(max_inst_bytes);
 }
@@ -238,6 +263,11 @@ bool TraceLifter::Lift(
   return impl->Lift(addr, callback);
 }
 
+// Set entry function pointer
+void TraceLifter::SetEntryPoint(std::string &entry_func_name) {
+  impl->SetEntryPoint(entry_func_name);
+}
+
 // Lift one or more traces starting from `addr`.
 bool TraceLifter::Impl::Lift(
     uint64_t addr, std::function<void(uint64_t, llvm::Function *)> callback) {
@@ -266,6 +296,9 @@ bool TraceLifter::Impl::Lift(
 
   trace_work_list.insert(addr);
   while (!trace_work_list.empty()) {
+    /*mss
+      prepare definition of pc, state, etc...
+    */
     const auto trace_addr = PopTraceAddress();
 
     // Already lifted.
@@ -310,6 +343,9 @@ bool TraceLifter::Impl::Lift(
     inst_work_list.insert(trace_addr);
 
     // Decode instructions.
+    /*mss
+      decode every instructions of target function.
+    */
     while (!inst_work_list.empty()) {
       const auto inst_addr = PopInstructionAddress();
 
