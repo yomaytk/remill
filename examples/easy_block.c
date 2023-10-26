@@ -41,13 +41,9 @@ int mhex(int num) {
 
 void easy_cal() {
     
-    char s[SLENGTH];
     int nums[NUMS];
+    char s[SLENGTH];
 
-    // initialize
-    for(int i = 0;i < SLENGTH;i++) {
-        s[i] = '\0';
-    }
     nums[0] = nums[1] = 0;
     for(int i = 2;i < NUMS;i++) {
         nums[i] = 1;

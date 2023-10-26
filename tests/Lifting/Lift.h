@@ -37,40 +37,45 @@
 #define ARY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
 #define AARCH_OP_SIZE 4
 
-class DisasmFunc;
+class DisasmFunc {
+  public:
+    DisasmFunc(std::string __func_name, uintptr_t __vma, uint64_t __func_size): func_name(__func_name), vma(__vma), func_size(__func_size) {}
+    DisasmFunc() {}
+
+    std::string func_name;
+    uintptr_t vma;
+    uint64_t func_size;
+};
 
 class AArch64TraceManager : public remill::TraceManager {
   public:
   
     virtual ~AArch64TraceManager(void) = default;
-    AArch64TraceManager(std::string target_elf_file_name): elf_obj(BinaryLoader::ELFObject(target_elf_file_name)) {}
+    AArch64TraceManager(std::string target_elf_file_name): elf_obj(BinaryLoader::ELFObject(target_elf_file_name)), unique_i64(0) {
+      panic_plt_jmp_fun_name = "__remill_panic_plt_jmp";
+    }
 
     void SetLiftedTraceDefinition(uint64_t addr, llvm::Function *lifted_func);
     llvm::Function *GetLiftedTraceDeclaration(uint64_t addr);
     llvm::Function *GetLiftedTraceDefinition(uint64_t addr);
     bool TryReadExecutableByte(uint64_t addr, uint8_t *byte);
+    std::string TraceName(uint64_t addr);
+    // same for TraceManager::TraceName
+    static std::string Sub_FuncName(uint64_t addr);
+    inline std::string GetUniqueLiftedFuncName(std::string func_name);
 
     void SetELFData();
 
+    BinaryLoader::ELFObject elf_obj;
     std::unordered_map<uintptr_t, uint8_t> memory;
-    std::unordered_map<uint64_t, llvm::Function *> traces;
-    std::vector<DisasmFunc> disasm_funcs;
+    std::unordered_map<uintptr_t, llvm::Function *> traces;
+    std::unordered_map<uintptr_t, DisasmFunc> disasm_funcs;
+    std::unordered_map<uintptr_t, bool> prerefered_func_addrs;
     std::string entry_func_lifted_name;
+    std::string panic_plt_jmp_fun_name;
+    uintptr_t entry_point;
 
   private:
-    BinaryLoader::ELFObject elf_obj;
-    uintptr_t entry_point;
-    uint8_t *text_bytes;
-    uint64_t text_size;
-    uintptr_t text_vma;
+    uint64_t unique_i64;
     
-};
-
-class DisasmFunc {
-  public:
-    DisasmFunc(std::string func_name_, uintptr_t begin_, uint64_t insn_size_): func_name(func_name_), begin(begin_), insns_size(insn_size_) {}
-
-    std::string func_name;
-    uintptr_t begin;
-    uint64_t insns_size;
 };

@@ -8,12 +8,10 @@ EMSCRIPTEN_BIN=${HOME}/emsdk/upstream/emscripten
 EMCC=${EMSCRIPTEN_BIN}/emcc
 CXX=clang++-16
 CXX_X64=x86_64-linux-gnu-g++-11
-EMCCFLAGS="-DREMILL_DISABLE_INT128 -I${SOURCE_DIR}/include"
+EMCCFLAGS="-DREMILL_DISABLE_INT128 -I${SOURCE_DIR}/include -Oz"
 CLANGFLAGS="-g -static"
 X64_GCC_FLAGS="-g -static -I${SOURCE_DIR}/include"
-ONLY_BUILD=0
 
-echo "[INFO] build start.\n"
 
 if [ $# -ne 1 ]; then
     echo "[ERROR] target ELF binary is not specified."
@@ -21,14 +19,29 @@ if [ $# -ne 1 ]; then
     exit 1
 fi
 
+if [ -z "$NOT_LINKED" ]; then
+    NOT_LINKED=0
+fi
+
+if [ -z "$NOT_LIFTED" ]; then
+    NOT_LIFTED=0
+fi
+
+if [ -z "$FAST_BUILD" ]; then
+    FAST_BUILD=0
+fi
+
 # build Lift.cpp
-cd $BUILD_DIR && \
-    ./tests/Lifting/lifting_target_aarch64 \
-    --arch aarch64 \
-    --bc_out ${BUILD_LIFTING_DIR}/lifting_target_aarch64.bc \
-    --target_elf $1 && \
-    llvm-dis ${BUILD_LIFTING_DIR}/lifting_target_aarch64.bc -o ${BUILD_LIFTING_DIR}/lifting_target_aarch64.ll
-echo "[INFO] generate lifting_target_aarch64.ll\n"
+if [ "$NOT_LIFTED" -ne 1 ]; then
+    echo "[INFO] Build Start."
+    cd $BUILD_DIR && \
+        ./tests/Lifting/lifting_target_aarch64 \
+        --arch aarch64 \
+        --bc_out ${BUILD_LIFTING_DIR}/lifting_target_aarch64.bc \
+        --target_elf $1 && \
+        llvm-dis ${BUILD_LIFTING_DIR}/lifting_target_aarch64.bc -o ${BUILD_LIFTING_DIR}/lifting_target_aarch64.ll
+    echo "[INFO] Generate lifting_target_aarch64.ll"
+fi
 
 # generate executable by clang (target: aarch64)
 # cd $SOURCE_LIFTING_DIR && \
@@ -43,12 +56,18 @@ echo "[INFO] generate lifting_target_aarch64.ll\n"
 #     $CXX_X64 $X64_GCC_FLAGS -o exe_x64 Entry.x64_gcc.o lifting_target_aarch64.x64_gcc.o
 
 # generate executable by emscripten (target: wasm)
-if [ $ONLY_BUILD -ne 1 ]; then
+if [ "$NOT_LINKED" -ne 1 ]; then
     cd $SOURCE_LIFTING_DIR && \
         $EMCC $EMCCFLAGS -c Entry.cpp -o ${BUILD_LIFTING_DIR}/Entry.o && \
         $EMCC $EMCCFLAGS -c Syscall.cpp -o ${BUILD_LIFTING_DIR}/Syscall.o && \
-        $EMCC $EMCCFLAGS -c VmIntrinsics.cpp -o ${BUILD_LIFTING_DIR}/VmIntrinsics.o && \
-        cd $BUILD_LIFTING_DIR && \
+        $EMCC $EMCCFLAGS -c VmIntrinsics.cpp -o ${BUILD_LIFTING_DIR}/VmIntrinsics.o
+fi
+
+if [ "$FAST_BUILD" -eq 1 ]; then
+    cd $BUILD_LIFTING_DIR && \
+        $EMCC $EMCCFLAGS -o exe.wasm Entry.o Syscall.o VmIntrinsics.o lifting_target_aarch64.o
+else
+    cd $BUILD_LIFTING_DIR && \
         $EMCC $EMCCFLAGS -c lifting_target_aarch64.ll -o lifting_target_aarch64.o && \
         $EMCC $EMCCFLAGS -o exe.wasm Entry.o Syscall.o VmIntrinsics.o lifting_target_aarch64.o
 fi

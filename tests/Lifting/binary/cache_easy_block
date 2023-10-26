@@ -1,0 +1,24 @@
+[DEBUG]
+File Name: ../../../examples/bin/easy_block
+Binary Format Type: elf64-littleaarch64
+CPU Architecture: aarch64
+Bits: 64
+Entry Address: 0x000002B4
+Section 0x00000238	.interp		27	DATA
+Section 0x00000254	.note.gnu.build-id		36	DATA
+Section 0x00000278	.gnu.hash		28	DATA
+Section 0x00000298	.dynsym		24	DATA
+Section 0x000002B0	.dynstr		1	DATA
+Section 0x000002B4	.text		932	CODE
+Section 0x00000658	.eh_frame_hdr		44	DATA
+Section 0x00000688	.eh_frame		136	DATA
+Section 0x00010F10	.dynamic		208	DATA
+Section 0x00010FE0	.got		8	DATA
+Section 0x00010FE8	.got.plt		24	DATA
+Section 0x00011000	.bss		104	DATA
+Section 0x00000000	.comment		28	READONLY
+Symbol    0x00000348     mhex                                                                       FUNC 
+Symbol    0x000002b4     _start                                                                     FUNC 
+Symbol    0x000003a0     easy_cal                                                                   FUNC 
+Symbol    0x000002c0     write_stdout                                                               FUNC 
+Symbol    0x000002f0     digit_num                                                                  FUNC 

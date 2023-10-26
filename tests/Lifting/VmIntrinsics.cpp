@@ -1,32 +1,90 @@
 #include <iostream>
+#include <cstdarg>
 #include "remill/Arch/Runtime/Intrinsics.h"
 #include "remill/Arch/AArch64/Runtime/State.h"
 #include "memory.h"
 
 template <typename T>
-NEVER_INLINE static T *getMemoryAddr(addr_t addr) {
-  
-  int i = 0;
-  while(g_emulated_memorys[i]) {
-    addr_t bytes_addr = reinterpret_cast<addr_t>(g_emulated_memorys[i]->bytes);
-    auto bytes_len = g_emulated_memorys[i]->len;
-    if (!(bytes_addr <= addr && addr < bytes_addr + bytes_len)) {
-      return reinterpret_cast<T*>(addr);
-    } 
-  }
-  int j = 0;
-  printf("[ERROR] Memory access falls outside the vaild range of the emulated memory. address: 0x%16llu\n", addr);
-  while (g_emulated_memorys[i]){
-    printf("memory_%d: start=0x%16llu, end=%16llu\n", 
-      i, reinterpret_cast<addr_t>(g_emulated_memorys[i]->bytes), reinterpret_cast<addr_t>(g_emulated_memorys[i]->bytes) + g_emulated_memorys[i]->len);
-  }
-  abort();
-
+NEVER_INLINE static T *getMemoryAddr(addr_t vma_addr) {
+  return reinterpret_cast<T*>(_ecv_translate_ptr(vma_addr));
 }
 
-#define UNDEFINED_INTRINSICS(intrinsics) printf("undefined intrinsics: %s", intrinsics); \
+#define UNDEFINED_INTRINSICS(intrinsics) printf("[ERROR] undefined intrinsics: %s\n", intrinsics); \
+                                          fflush(stdout); \
                                           abort();
+#define PRINT_GPREGISTERS(index) printf("w" #index ": %u, x" #index ": %llu, ", g_state.gpr.x##index.dword, g_state.gpr.x##index.qword)
 
+extern "C" void debug_state_machine() {
+  printf("[Debug]\n");
+  printf("State.GPR: ");
+  PRINT_GPREGISTERS(0);
+  PRINT_GPREGISTERS(1);
+  PRINT_GPREGISTERS(2);
+  PRINT_GPREGISTERS(3);
+  PRINT_GPREGISTERS(4);
+  PRINT_GPREGISTERS(5);
+  PRINT_GPREGISTERS(6);
+  PRINT_GPREGISTERS(7);
+  PRINT_GPREGISTERS(8);
+  PRINT_GPREGISTERS(9);
+  PRINT_GPREGISTERS(10);
+  PRINT_GPREGISTERS(11);
+  PRINT_GPREGISTERS(12);
+  PRINT_GPREGISTERS(13);
+  PRINT_GPREGISTERS(14);
+  PRINT_GPREGISTERS(15);
+  PRINT_GPREGISTERS(16);
+  PRINT_GPREGISTERS(17);
+  PRINT_GPREGISTERS(18);
+  PRINT_GPREGISTERS(19);
+  PRINT_GPREGISTERS(20);
+  PRINT_GPREGISTERS(21);
+  PRINT_GPREGISTERS(22);
+  PRINT_GPREGISTERS(23);
+  PRINT_GPREGISTERS(24);
+  PRINT_GPREGISTERS(25);
+  PRINT_GPREGISTERS(26);
+  PRINT_GPREGISTERS(27);
+  PRINT_GPREGISTERS(28);
+  PRINT_GPREGISTERS(29);
+  PRINT_GPREGISTERS(30);
+  printf("sp: %llu, pc: 0x%08llx\n", g_state.gpr.sp.qword, g_state.gpr.pc.qword);
+  auto nzcv = g_state.nzcv;
+  printf("State.NZCV:\nn: %hhu, z: %hhu, c: %hhu, v: %hhu\n", nzcv.n, nzcv.z, nzcv.c, nzcv.v);
+  auto sr = g_state.sr;
+  printf("State.SR:\ntpidr_el0: %llu, tpidrro_el0: %llu, n: %hhu, z: %hhu, c: %hhu, v: %hhu, ixc: %hhu, ofc: %hhu, ufc: %hhu, idc: %hhu, ioc: %hhu\n", 
+    sr.tpidr_el0.qword, sr.tpidrro_el0.qword, sr.n, sr.z, sr.c, sr.v, sr.ixc, sr.ofc, sr.ufc, sr.idc, sr.ioc);
+}
+
+extern void debug_g_memorys() {
+  for (auto &memory : g_memorys->emulated_memorys) {
+    printf("memory_area_type: ");
+    switch (memory->memory_area_type)
+    {
+    case MemoryAreaType::STACK:
+      printf("STACK, ");
+      break;
+    case MemoryAreaType::HEAP:
+      printf("HEAP, ");
+      break;
+    case MemoryAreaType::DATA:
+      printf("DATA, ");
+      break;
+    case MemoryAreaType::RODATA:
+      printf("RODATA, ");
+      break;
+    case MemoryAreaType::OTHER:
+      printf("OTHER, ");
+      break;
+    default:
+      printf("[ERROR] unknown memory area type, ");
+      abort();
+      break;
+    }
+    printf("name: %s, vma: 0x%016llx, len: %llu, bytes: 0x%016llx, upper_bytes: 0x%016llx, bytes_on_heap: %s, to_higher: %s\n",
+      memory->name.c_str(), memory->vma, memory->len, (addr_t)memory->bytes, (addr_t)memory->upper_bytes, memory->bytes_on_heap ? "true" : "false", memory->to_higher ? "true" : "false");
+  }
+}
 
 uint8_t __remill_read_memory_8(Memory *, addr_t addr){
   return *getMemoryAddr<uint8_t>(addr);
@@ -111,13 +169,40 @@ extern "C" void __remill_mark_as_used(void *mem) {
   empty runtime helper function
 */
 
-Memory *__remill_function_return(State &, addr_t addr, Memory * memory) {
-  return nullptr;
+Memory *__remill_function_return(State &, addr_t, Memory *memory) {
+  return memory;
 }
 
-Memory *__remill_missing_block(State &, addr_t addr, Memory *memory) {
-  return nullptr;
+Memory *__remill_missing_block(State &, addr_t, Memory *memory) {
+  printf("[WARNING] reached \"__remill_missing_block\"\n");
+  return memory;
 }
+
+Memory *__remill_async_hyper_call(State &, addr_t ret_addr, Memory *memory){ 
+  return memory; 
+}
+// panic function for jumping to .plt section
+Memory *__remill_panic_plt_jmp(State &, addr_t, Memory *) {
+  printf("[ERROR] detect jumping to .plt section\n");
+  fflush(stdout);
+  abort();
+}
+
+bool __remill_flag_computation_sign(bool result, ...){ return result; }
+bool __remill_flag_computation_zero(bool result, ...){ return result; }
+bool __remill_flag_computation_overflow(bool result, ...){ return result; }
+bool __remill_flag_computation_carry(bool result, ...){ return result; }
+
+bool __remill_compare_sle(bool result){ return result; }
+bool __remill_compare_slt(bool result){ return result; }
+bool __remill_compare_sge(bool result){ return result; }
+bool __remill_compare_sgt(bool result){ return result; }
+bool __remill_compare_ule(bool result){ return result; }
+bool __remill_compare_ult(bool result){ return result; }
+bool __remill_compare_ugt(bool result){ return result; }
+bool __remill_compare_uge(bool result){ return result; }
+bool __remill_compare_eq(bool result){ return result; }
+bool __remill_compare_neq(bool result){ return result; }
 
 Memory *__remill_read_memory_f80(Memory *, addr_t, native_float80_t &){ UNDEFINED_INTRINSICS("__remill_read_memory_f80"); return nullptr; }
 Memory * __remill_write_memory_f80(Memory *, addr_t, const native_float80_t &){ UNDEFINED_INTRINSICS("__remill_") return nullptr; }
@@ -131,28 +216,11 @@ float64_t __remill_undefined_f64(void){ UNDEFINED_INTRINSICS("__remill_undefined
 float80_t __remill_undefined_f80(void){ UNDEFINED_INTRINSICS("__remill_undefined_f80"); return 0; }
 float128_t __remill_undefined_f128(void){ UNDEFINED_INTRINSICS("__remill_undefined_f128"); return 0; }
 
-bool __remill_flag_computation_zero(bool result, ...){ UNDEFINED_INTRINSICS("__remill_flag_computation_zero"); return 0; }
-bool __remill_flag_computation_sign(bool result, ...){ UNDEFINED_INTRINSICS("__remill_flag_computation_sign"); return 0; }
-bool __remill_flag_computation_overflow(bool result, ...){ UNDEFINED_INTRINSICS("__remill_flag_computation_overflow"); return 0; }
-bool __remill_flag_computation_carry(bool result, ...){ UNDEFINED_INTRINSICS("__remill_flag_computation_carry"); return 0; }
-
-bool __remill_compare_sle(bool result){ UNDEFINED_INTRINSICS("__remill_compare_sle"); return 0; }
-bool __remill_compare_slt(bool result){ UNDEFINED_INTRINSICS("__remill_compare_slt"); return 0; }
-bool __remill_compare_sge(bool result){ UNDEFINED_INTRINSICS("__remill_compare_sge"); return 0; }
-bool __remill_compare_sgt(bool result){ UNDEFINED_INTRINSICS("__remill_compare_sgt"); return 0; }
-bool __remill_compare_ule(bool result){ UNDEFINED_INTRINSICS("__remill_compare_ule"); return 0; }
-bool __remill_compare_ult(bool result){ UNDEFINED_INTRINSICS("__remill_compare_ult"); return 0; }
-bool __remill_compare_ugt(bool result){ UNDEFINED_INTRINSICS("__remill_compare_ugt"); return 0; }
-bool __remill_compare_uge(bool result){ UNDEFINED_INTRINSICS("__remill_compare_uge"); return 0; }
-bool __remill_compare_eq(bool result){ UNDEFINED_INTRINSICS("__remill_compare_eq"); return 0; }
-bool __remill_compare_neq(bool result){ UNDEFINED_INTRINSICS("__remill_compare_neq"); return 0; }
-
 Memory * __remill_error(State &, addr_t addr, Memory *){ UNDEFINED_INTRINSICS("__remill_error"); return 0; }
 Memory * __remill_function_call(State &, addr_t addr, Memory *){ UNDEFINED_INTRINSICS("__remill_function_call"); return 0; }
 // Memory *__remill_function_return(State &, addr_t addr, Memory *){ return 0; }
 Memory * __remill_jump(State &, addr_t addr, Memory *){ UNDEFINED_INTRINSICS("__remill_jump"); return 0; }
 // Memory *__remill_missing_block(State &, addr_t addr, Memory *){ return 0; }
-Memory *__remill_async_hyper_call(State &, addr_t ret_addr, Memory *){ UNDEFINED_INTRINSICS("__remill_async_hyper_call"); return 0; }
 // Memory * __remill_sync_hyper_call(State &, Memory *, SyncHyperCall::Name){ return 0; }
 Memory * __remill_barrier_load_load(Memory *){ UNDEFINED_INTRINSICS("__remill_barrier_load_load"); return 0; }
 Memory * __remill_barrier_load_store(Memory *){ UNDEFINED_INTRINSICS("__remill_barrier_load_store"); return 0; }

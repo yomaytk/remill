@@ -118,49 +118,32 @@ void ELFObject::LoadStaticSymbolsBFD() {
 
 }
 
-std::tuple<uint8_t*, uint64_t, uintptr_t> ELFObject::GetTextSection() {
-    
-	uint8_t *text_bytes;
-	uint64_t text_size;
-	uintptr_t text_vma;
-	bool text_found = false;
-
-    if (sections.empty()) {
-			printf("[BUG] GetTextSection is called but sections is empty\n");
-			abort();
-    } else {
-			for (auto& section : sections) {
-				if (section.sec_name.compare(".text") == 0) {
-					if (text_found) {
-						printf("found multiple .text section.\n");
-						abort();
-					}
-					text_found = true;
-					text_bytes = section.bytes;
-					text_size = section.size;
-					text_vma = section.vma;
-				}
+void ELFObject::SetCodeSection() {
+	if (sections.empty()) {
+		printf("[BUG] GetTextSection is called but sections is empty\n");
+		abort();
+	} else {
+		for (auto& section : sections) {
+			if (section.sec_type == ELFSection::SectionType::SEC_TYPE_CODE) {
+				code_sections[section.sec_name] = CodeSection (section.sec_name, section.vma, section.bytes, section.size);
 			}
-    }
-    return {text_bytes, text_size, text_vma};
+		}
+	}
 }
 
 std::vector<ELFObject::FuncEntry> ELFObject::GetFuncEntry() {
     
 	std::vector<ELFObject::FuncEntry> func_entrys;
-
 	if (symbols.empty()) {
 		printf("[BUG] GetFuncEntry is called but symbols is empty\n");
 		abort();
 	} else {
 		for (auto& symbol : symbols) {
 			if (symbol.sym_type == ELFSymbol::SymbolType::SYM_TYPE_FUNC) {
-				func_entrys.emplace_back(FuncEntry(symbol.addr, symbol.sym_name, entry == symbol.addr));
+				func_entrys.emplace_back(FuncEntry(symbol.addr, symbol.sym_name));
 			}
 		}
 	}
-	// descending order
-	std::sort(func_entrys.rbegin(), func_entrys.rend());
 	return func_entrys;
 
 }
@@ -247,8 +230,21 @@ void ELFObject::DebugSections() {
 
 void ELFObject::DebugStaticSymbols() {
 
+	char s[250];
 	for (auto& symbol : symbols) {
-		printf("Symbol 0x%08lX\t%s\t\t%s\n", 
-			symbol.addr, symbol.sym_name.c_str(), symbol.sym_type == ELFSymbol::SymbolType::SYM_TYPE_FUNC ? "FUNC" : "OTHER");
+		std::memset(s, ' ', 250);
+		// copy "Symbol"
+		std::strncpy(s, "Symbol", std::strlen("Symbol"));
+		// copy address
+		char addr_ss[20];
+		std::snprintf(addr_ss, 11, "0x%08lX", symbol.addr);
+		std::strncpy(s + 10, addr_ss, 10);
+		// copy symbol name
+		std::strncpy(s + 25, symbol.sym_name.c_str(), std::strlen(symbol.sym_name.c_str()));
+		// copy symbol type
+		std::strncpy(s + 100, symbol.sym_type == ELFSymbol::SymbolType::SYM_TYPE_FUNC ? "FUNC " : "OTHER", 5);
+		s[105] = '\0';
+		printf("%s\n", s);
 	}
+
 }

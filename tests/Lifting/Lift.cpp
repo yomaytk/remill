@@ -31,7 +31,7 @@ DEFINE_string(target_elf, "DUMMY_ELF",
               "Name of the target ELF binary");
 
 void AArch64TraceManager::SetLiftedTraceDefinition(uint64_t addr, llvm::Function *lifted_func) {
-    traces[addr] = lifted_func;
+  traces[addr] = lifted_func;
 }
 
 llvm::Function *AArch64TraceManager::GetLiftedTraceDeclaration(uint64_t addr) {
@@ -59,36 +59,75 @@ bool AArch64TraceManager::TryReadExecutableByte(uint64_t addr, uint8_t *byte) {
 
 }
 
+std::string AArch64TraceManager::Sub_FuncName(uint64_t addr) {
+  std::stringstream ss;
+  ss << "sub_" << std::hex << addr;
+  return ss.str();
+}
+
+std::string AArch64TraceManager::TraceName(uint64_t addr) {
+  // call super class method
+  auto fun_name = Sub_FuncName(addr);
+  prerefered_func_addrs[addr] = true;
+  return fun_name;
+}
+
+std::string AArch64TraceManager::GetUniqueLiftedFuncName(std::string func_name) {
+  return func_name + "_" + to_string(unique_i64++) + "__Lifted";
+}
+
 void AArch64TraceManager::SetELFData() {
 
   elf_obj.LoadELF();
   entry_point = elf_obj.entry;
   // set text section
-  auto [__text_bytes, __text_size, __text_vma] = elf_obj.GetTextSection();
-  text_bytes = __text_bytes;
-  text_size = __text_size;
-  text_vma = __text_vma;
+  elf_obj.SetCodeSection();
   // set symbol table (WARNING: only when the ELF binary is not stripped)
   auto func_entrys = elf_obj.GetFuncEntry();
-  // set instructions to the buf of manager
-  uintptr_t func_limit_addr = reinterpret_cast<uintptr_t>(text_vma + text_size);
-  for (auto i = 0;i < func_entrys.size();i++) {
-    uint64_t func_bytes_size = func_limit_addr - func_entrys[i].entry;
-    auto disasm_func = DisasmFunc(func_entrys[i].func_name + "__Lifted", func_entrys[i].entry, func_bytes_size);
-    // find the function of entry point
-    if (entry_point == func_entrys[i].entry) {
-      if (!entry_func_lifted_name.empty()) {
-        printf("multiple entrypoints are found.\n");
-        abort();
+  std::sort(func_entrys.rbegin(), func_entrys.rend());
+  // set instruction bytes of every code sections
+  size_t i = 0;
+  while (i < func_entrys.size()) {
+    uint64_t fun_bytes_size;
+    uintptr_t fun_end_addr;
+    uintptr_t sec_addr;
+    uintptr_t n_fun_end_addr;
+    uint8_t *bytes;
+    int sec_included_cnt = 0;
+    // specify included section
+    for (auto &[_, code_sec] : elf_obj.code_sections) {
+      if (code_sec.vma <= func_entrys[i].entry && func_entrys[i].entry < code_sec.vma + code_sec.size) {
+        sec_addr = code_sec.vma;
+        fun_end_addr = code_sec.vma + code_sec.size;
+        fun_bytes_size = (code_sec.vma + code_sec.size) - func_entrys[i].entry;
+        bytes = code_sec.bytes;
+        sec_included_cnt++;
       }
-      entry_func_lifted_name = disasm_func.func_name;
     }
-    // assign every insn to the manager
-    for (uintptr_t addr = func_entrys[i].entry;addr < func_limit_addr; addr++) {
-      memory[addr] = text_bytes[addr - text_vma];
+    if (sec_included_cnt != 1) {
+      printf("[ERROR] \"%s\" is not included in one code section.\n", func_entrys[i].func_name.c_str());
+      exit(EXIT_FAILURE);
     }
-    disasm_funcs.emplace_back(disasm_func);
-    func_limit_addr = func_entrys[i].entry;
+    n_fun_end_addr = UINTPTR_MAX;
+    while (sec_addr < n_fun_end_addr) {
+      // assign every insn to the manager
+      auto lifted_func_name = GetUniqueLiftedFuncName(func_entrys[i].func_name);
+      auto dasm_func = DisasmFunc(lifted_func_name, func_entrys[i].entry, fun_bytes_size);
+      // program entry point
+      if (entry_point == func_entrys[i].entry) {
+        if (!entry_func_lifted_name.empty()) {
+          printf("[ERROR] multiple entrypoints are found.\n");
+          exit(EXIT_FAILURE);
+        }
+        entry_func_lifted_name = dasm_func.func_name;
+      }
+      for (uintptr_t addr = func_entrys[i].entry;addr < fun_end_addr; addr++) {
+        memory[addr] = bytes[addr - sec_addr];
+      }
+      disasm_funcs[func_entrys[i].entry] = dasm_func;
+      n_fun_end_addr = func_entrys[i].entry;
+      i++;
+    }
   }
 
 }
@@ -109,25 +148,53 @@ extern "C" int main(int argc, char *argv[]) {
   remill::IntrinsicTable intrinsics(module.get());
   remill::TraceLifter trace_lifter(arch.get(), manager);
 
-  for (auto &asm_func : manager.disasm_funcs) {
-    // lifting every disasm function
-    if (trace_lifter.Lift(asm_func.begin)) {
-      printf("[INFO] Lifted func: %s\n", asm_func.func_name.c_str());
-    } else {
+  // lift every disassembled function
+  for (const auto &[_, asm_func] : manager.disasm_funcs) {
+    if (!trace_lifter.Lift(asm_func.vma)) {
       printf("[ERROR] Failed to Lift \"%s\"\n", asm_func.func_name.c_str());
-      abort();
+      exit(EXIT_FAILURE);
     }
     // set function name
-    auto lifted_trace = manager.GetLiftedTraceDefinition(asm_func.begin);
+    auto lifted_trace = manager.GetLiftedTraceDefinition(asm_func.vma);
     lifted_trace->setName(asm_func.func_name.c_str());
   }
-  
   // set entry point
   if (manager.entry_func_lifted_name.empty()) {
     printf("[ERROR] We couldn't find entry function.\n");
-    abort();
+    exit(EXIT_FAILURE);
   } else {
     trace_lifter.SetEntryPoint(manager.entry_func_lifted_name);
+  }
+  // set entry pc
+  trace_lifter.SetEntryPC(manager.entry_point);
+  // set data section
+  trace_lifter.SetDataSections(manager.elf_obj.sections);
+  // define prerefered functions
+  for (auto [addr, pre_refered] : manager.prerefered_func_addrs) {
+    if (!pre_refered) {
+      continue;
+    }
+    auto lifted_func_name = manager.disasm_funcs[addr].func_name;
+    if (lifted_func_name.empty()) {
+      auto &plt_code_sec = manager.elf_obj.code_sections[".plt"];
+      // panic if move to .plt section
+      if (plt_code_sec.vma <= addr && addr < plt_code_sec.vma + plt_code_sec.size) {
+        trace_lifter.DefinePreReferedFunction(
+          manager.Sub_FuncName(addr),
+          manager.panic_plt_jmp_fun_name,
+          remill::LLVMFunTypeIdent::VOID_VOID
+        );
+      } else {
+        printf("[ERROR] addr \"0x%08lx\" is not function entry point.\n", addr);
+        exit(EXIT_FAILURE);
+      }
+    } else {
+      trace_lifter.DefinePreReferedFunction(
+        manager.Sub_FuncName(addr), 
+        lifted_func_name, 
+        remill::LLVMFunTypeIdent::NULL_FUN_TY
+      );
+    }
   }
   
   auto host_arch =

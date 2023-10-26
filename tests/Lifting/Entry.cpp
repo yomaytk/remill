@@ -5,22 +5,39 @@
 #include "remill/Arch/AArch64/Runtime/State.h"
 #include "memory.h"
 
-addr_t g_pc;
 State g_state = State();
+MemoryManager *g_memorys;
 
-EmulatedMemory **g_emulated_memorys;
+int main(int argc, char* argv[]) {
 
-int main(int argc, char** argv) {
-
-  // allocate emulated stack and heap memory
-  g_emulated_memorys[0] = new EmulatedMemory(MemoryAreaType::STACK, DUMMY_VMA, STACK_SIZE, reinterpret_cast<uint8_t*>(malloc(STACK_SIZE)));
-  g_emulated_memorys[1] = new EmulatedMemory(MemoryAreaType::HEAP, DUMMY_VMA, MAPPED_SIZE, reinterpret_cast<uint8_t*>(malloc(MAPPED_SIZE)));
-  // initalize State and PC
-  g_pc = reinterpret_cast<addr_t>(__g_entry_func);
-  g_state.gpr.pc = { .qword = reinterpret_cast<addr_t>(__g_entry_func) };
-  g_state.gpr.sp = { .qword = reinterpret_cast<addr_t>(g_emulated_memorys[0]->bytes)};
+  std::vector<EmulatedMemory*> g_emulated_memorys;
+  // allocate Stack
+  g_emulated_memorys.emplace_back(EmulatedMemory::VmaStackEntryInit(argc, argv));
+  // allocate one Heap
+  g_emulated_memorys.emplace_back(EmulatedMemory::VmaHeapEntryInit());
+  // allocate every sections
+  for (int i = 0; i < __g_data_sec_num; i++) {
+    g_emulated_memorys.emplace_back( new EmulatedMemory(
+      MemoryAreaType::DATA,
+      reinterpret_cast<const char*>(__g_data_sec_name_ptr_array[i]),
+      __g_data_sec_vma_array[i],
+      static_cast<size_t>(__g_data_sec_size_array[i]),
+      __g_data_sec_bytes_ptr_array[i],
+      __g_data_sec_bytes_ptr_array[i] + __g_data_sec_size_array[i],
+      false,
+      true
+      )
+    );
+  }
+  g_memorys = new MemoryManager (g_emulated_memorys);
+  // initalize State 
+  g_state.gpr.pc = { .qword = __g_entry_pc };
+  g_state.gpr.sp = { .qword = g_emulated_memorys[0]->vma };
   // go to the entry function (entry point is injected by lifted LLVM IR)
-  __g_entry_func(&g_state, g_pc, reinterpret_cast<Memory*>(g_emulated_memorys));
+  __g_entry_func(&g_state, __g_entry_pc, reinterpret_cast<Memory*>(g_memorys));
+
+  delete(g_memorys);
+
   return 0;
 
 }

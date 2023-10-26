@@ -1,0 +1,15 @@
+[DEBUG]
+File Name: ../../../examples/bin/print_hello
+Binary Format Type: elf64-littleaarch64
+CPU Architecture: aarch64
+Bits: 64
+Entry Address: 0x00400204
+Section 0x00400190	.note.gnu.build-id		36	DATA
+Section 0x004001B4	.text		96	CODE
+Section 0x00400214	.eh_frame_hdr		28	DATA
+Section 0x00400230	.eh_frame		84	DATA
+Section 0x00410FE8	.data		14	DATA
+Section 0x00000000	.comment		28	READONLY
+Symbol    0x00400204     _start                                                                     FUNC 
+Symbol    0x004001e4     print_hello                                                                FUNC 
+Symbol    0x004001b4     write_stdout                                                               FUNC 

@@ -105,6 +105,9 @@ class IntrinsicTable {
   llvm::IntegerType *const pc_type;
   llvm::PointerType *const mem_ptr_type;
 
+  // panic
+  llvm::Function *const panic_plt_jmp;
+
  private:
   IntrinsicTable(void) = delete;
 };

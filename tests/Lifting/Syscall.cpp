@@ -7,7 +7,6 @@
 #include <unistd.h>
 #include <sys/uio.h>
 #include <sys/time.h>
-// #include <linux/futex.h>
 #include <sys/syscall.h>
 #include <signal.h>
 #include <sys/utsname.h>
@@ -52,9 +51,7 @@
 #define _ECV_EACESS 13
 #define _ECV_ENOSYS 38
 
-#define _ECV_VMA_INVALID 1
-
-typedef uint32_t _ecv_reg_t;
+// #define _ECV_VMA_INVALID 1
 
 /*
   for ioctl syscall
@@ -105,12 +102,14 @@ struct _ecv_statx {
     uint64_t __spare3[12];
 };
 
-/*
-  for statx syscall
-*/
-
 #define _ECV_AT_EMPTY_PATH 0x1000
 #define _ECV_STATX_BASIC_STATS 0x000007ffU
+
+/*
+  FIXME! we should get this from original ELF
+*/
+_ecv_reg_t _ecv_at_phent = 56;
+_ecv_reg_t _ecv_at_phnum = 7;
 
 /*
   translate vma address to the actual mapped memory address.
@@ -124,24 +123,39 @@ struct _ecv_statx {
     void *pma_addr = nullptr;
     // search in every emulated memory
     bool vma_allocated = false;
-    for(int i = 0;g_emulated_memorys[i];i++) {
-      if (g_emulated_memorys[i]->vma == DUMMY_VMA) {
+    for(auto &memory : g_memorys->emulated_memorys) {
+      if (memory->vma == DUMMY_VMA) {
         continue;
       }
-      if (g_emulated_memorys[i]->vma <= vma_addr && vma_addr < g_emulated_memorys[i]->vma + g_emulated_memorys[i]->len) {
+      if ((memory->to_higher && memory->vma <= vma_addr && vma_addr < memory->vma + memory->len)
+            || (!memory->to_higher && memory->vma - memory->len <= vma_addr && vma_addr < memory->vma)) {
         // allocate buffer to mapped memory
-        if (g_emulated_memorys[i]->bytes == NULL) {
-          g_emulated_memorys[i]->len = MAPPED_SIZE;
-          g_emulated_memorys[i]->bytes = reinterpret_cast<uint8_t*>(malloc(g_emulated_memorys[i]->len));
-          memset(g_emulated_memorys[i]->bytes, 0, g_emulated_memorys[i]->len);
+        if (memory->bytes == NULL) {
+          uint64_t len = MAPPED_SIZE;
+          auto bytes = reinterpret_cast<uint8_t*>(malloc(len));
+          memset(bytes, 0, len);
+          memory = new EmulatedMemory(
+            MemoryAreaType::DATA,
+            "DUMMY",
+            DUMMY_VMA,
+            len,
+            bytes,
+            bytes + len,
+            true,
+            true
+          );
+          printf("[WARNING] caused new memory is allocated the original ELF don't know. addr: %llu\n", vma_addr);
         }
         vma_allocated = true;
-        pma_addr = reinterpret_cast<void*>(g_emulated_memorys[i]->bytes + (vma_addr - g_emulated_memorys[i]->vma));
+        pma_addr = reinterpret_cast<void*>(
+          memory->to_higher ?
+            (memory->bytes + (vma_addr - memory->vma)) : (memory->upper_bytes - (memory->vma - vma_addr))
+        );
         break;
       }
     }
     if (!vma_allocated) {
-      printf("[ERROR] We cannot translate vma_addr to pma_addr because all vma are invaild. addr: 0x%16llu\n", vma_addr);
+      printf("[ERROR] We cannot translate vma_addr to pma_addr because it is out the range of any vma space. vma_addr: 0x%08llx\n", vma_addr);
       abort();
     }
     
@@ -160,7 +174,7 @@ void __svc_call(void) {
 
   auto &state_gpr = g_state.gpr;
   errno = 0;
-
+  
   switch (state_gpr.x8.qword)
   {
     case AARCH64_SYS_IOCTL:  /* ioctl (unsigned int fd, unsigned int cmd, unsigned long arg) */
@@ -348,7 +362,8 @@ void __svc_call(void) {
         }
         struct stat _stat;
         // execute fstat
-        errno = fstat(dfd, &_stat);
+        // errno = fstat(dfd, &_stat);
+        errno = 0;
         if (errno == 0) {
           struct _ecv_statx _statx;
           memset(&_statx, 0, sizeof(_statx));

@@ -17,6 +17,7 @@
 #pragma once
 
 #include <remill/BC/Lifter.h>
+#include <tests/Lifting/binary/loader.h>
 
 #include <functional>
 #include <unordered_map>
@@ -26,6 +27,11 @@ namespace remill {
 using TraceMap = std::unordered_map<uint64_t, llvm::Function *>;
 
 enum class DevirtualizedTargetKind { kTraceLocal, kTraceHead };
+
+enum class LLVMFunTypeIdent : uint64_t {
+  VOID_VOID,
+  NULL_FUN_TY,
+};
 
 // Manages information about traces. Permits a user of the trace lifter to
 // provide more global information to the decoder as it goes, e.g. by pre-
@@ -100,6 +106,9 @@ class TraceLifter {
        std::function<void(uint64_t, llvm::Function *)> callback = NullCallback);
     
   void SetEntryPoint(std::string &entry_func_name);
+  void SetEntryPC(uint64_t pc);
+  void SetDataSections(std::vector<BinaryLoader::ELFSection> &sections);
+  void DefinePreReferedFunction(std::string sub_func_name, std::string lifted_func_name, LLVMFunTypeIdent llvm_fn_ty_id);
 
  private:
   TraceLifter(void) = delete;

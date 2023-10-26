@@ -56,7 +56,7 @@ typedef int16_t addr_diff_t;
 #endif
 
 // Entry function of the original ELF
-typedef addr_t (*EntryFunc)(State *state, addr_t pc, Memory *memory);
+typedef unsigned long (*EntryFunc)(State *state, addr_t pc, Memory *memory);
 
 // Note: We are re-defining the `std::is_signed` type trait because we can't
 //       always explicitly specialize it inside of the `std` namespace.
