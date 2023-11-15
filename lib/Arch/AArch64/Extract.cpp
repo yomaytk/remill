@@ -68884,7 +68884,7 @@ static bool TryExtractSYS_CR_SYSTEM(InstData &inst, uint32_t bits) {
     return true;
   if (false && TryExtractTLBI_SYS_CR_SYSTEM(inst, bits))
     return true;
-  if (false && TryExtractDC_SYS_CR_SYSTEM(inst, bits))
+  if (TryExtractDC_SYS_CR_SYSTEM(inst, bits))
     return true;
   if (false && TryExtractIC_SYS_CR_SYSTEM(inst, bits))
     return true;

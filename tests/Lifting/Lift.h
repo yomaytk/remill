@@ -60,7 +60,7 @@ class AArch64TraceManager : public remill::TraceManager {
     llvm::Function *GetLiftedTraceDefinition(uint64_t addr);
     bool TryReadExecutableByte(uint64_t addr, uint8_t *byte);
     std::string TraceName(uint64_t addr);
-    // same for TraceManager::TraceName
+    /* same for TraceManager::TraceName */
     static std::string Sub_FuncName(uint64_t addr);
     inline std::string GetUniqueLiftedFuncName(std::string func_name);
 

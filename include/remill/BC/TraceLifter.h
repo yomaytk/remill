@@ -93,8 +93,8 @@ class TraceLifter {
   ~TraceLifter(void);
 
   inline TraceLifter(const Arch *arch_, TraceManager &manager_)
-      : TraceLifter(arch_, &manager_) {}
-
+    : TraceLifter(arch_, &manager_) {}
+    
   TraceLifter(const Arch *arch_, TraceManager *manager_);
 
   static void NullCallback(uint64_t, llvm::Function *);
@@ -102,13 +102,20 @@ class TraceLifter {
   // Lift one or more traces starting from `addr`. Calls `callback` with each
   // lifted trace.
   bool
-  Lift(uint64_t addr,
+  Lift(uint64_t addr, const char *fun_name = "",
        std::function<void(uint64_t, llvm::Function *)> callback = NullCallback);
     
   void SetEntryPoint(std::string &entry_func_name);
   void SetEntryPC(uint64_t pc);
   void SetDataSections(std::vector<BinaryLoader::ELFSection> &sections);
   void DefinePreReferedFunction(std::string sub_func_name, std::string lifted_func_name, LLVMFunTypeIdent llvm_fn_ty_id);
+  void SetELFPhdr(uint64_t e_phent, uint64_t e_phnum, uint8_t *e_ph);
+  void SetPlatform(const char *platform_name);
+  void SetLiftedFunPtrTable(std::unordered_map<uint64_t, const char *> &addr_fn_map);
+  /* debug */
+  void SetControlFlowDebugList(std::unordered_map<uint64_t, bool> &control_flow_debug_list);
+  void DeclareDebugStateMachine();
+  void DeclareDebugPC();
 
  private:
   TraceLifter(void) = delete;

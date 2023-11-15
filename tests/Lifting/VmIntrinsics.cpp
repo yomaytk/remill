@@ -4,87 +4,10 @@
 #include "remill/Arch/AArch64/Runtime/State.h"
 #include "memory.h"
 
-template <typename T>
-NEVER_INLINE static T *getMemoryAddr(addr_t vma_addr) {
-  return reinterpret_cast<T*>(_ecv_translate_ptr(vma_addr));
-}
-
 #define UNDEFINED_INTRINSICS(intrinsics) printf("[ERROR] undefined intrinsics: %s\n", intrinsics); \
+                                          debug_state_machine(); \
                                           fflush(stdout); \
                                           abort();
-#define PRINT_GPREGISTERS(index) printf("w" #index ": %u, x" #index ": %llu, ", g_state.gpr.x##index.dword, g_state.gpr.x##index.qword)
-
-extern "C" void debug_state_machine() {
-  printf("[Debug]\n");
-  printf("State.GPR: ");
-  PRINT_GPREGISTERS(0);
-  PRINT_GPREGISTERS(1);
-  PRINT_GPREGISTERS(2);
-  PRINT_GPREGISTERS(3);
-  PRINT_GPREGISTERS(4);
-  PRINT_GPREGISTERS(5);
-  PRINT_GPREGISTERS(6);
-  PRINT_GPREGISTERS(7);
-  PRINT_GPREGISTERS(8);
-  PRINT_GPREGISTERS(9);
-  PRINT_GPREGISTERS(10);
-  PRINT_GPREGISTERS(11);
-  PRINT_GPREGISTERS(12);
-  PRINT_GPREGISTERS(13);
-  PRINT_GPREGISTERS(14);
-  PRINT_GPREGISTERS(15);
-  PRINT_GPREGISTERS(16);
-  PRINT_GPREGISTERS(17);
-  PRINT_GPREGISTERS(18);
-  PRINT_GPREGISTERS(19);
-  PRINT_GPREGISTERS(20);
-  PRINT_GPREGISTERS(21);
-  PRINT_GPREGISTERS(22);
-  PRINT_GPREGISTERS(23);
-  PRINT_GPREGISTERS(24);
-  PRINT_GPREGISTERS(25);
-  PRINT_GPREGISTERS(26);
-  PRINT_GPREGISTERS(27);
-  PRINT_GPREGISTERS(28);
-  PRINT_GPREGISTERS(29);
-  PRINT_GPREGISTERS(30);
-  printf("sp: %llu, pc: 0x%08llx\n", g_state.gpr.sp.qword, g_state.gpr.pc.qword);
-  auto nzcv = g_state.nzcv;
-  printf("State.NZCV:\nn: %hhu, z: %hhu, c: %hhu, v: %hhu\n", nzcv.n, nzcv.z, nzcv.c, nzcv.v);
-  auto sr = g_state.sr;
-  printf("State.SR:\ntpidr_el0: %llu, tpidrro_el0: %llu, n: %hhu, z: %hhu, c: %hhu, v: %hhu, ixc: %hhu, ofc: %hhu, ufc: %hhu, idc: %hhu, ioc: %hhu\n", 
-    sr.tpidr_el0.qword, sr.tpidrro_el0.qword, sr.n, sr.z, sr.c, sr.v, sr.ixc, sr.ofc, sr.ufc, sr.idc, sr.ioc);
-}
-
-extern void debug_g_memorys() {
-  for (auto &memory : g_memorys->emulated_memorys) {
-    printf("memory_area_type: ");
-    switch (memory->memory_area_type)
-    {
-    case MemoryAreaType::STACK:
-      printf("STACK, ");
-      break;
-    case MemoryAreaType::HEAP:
-      printf("HEAP, ");
-      break;
-    case MemoryAreaType::DATA:
-      printf("DATA, ");
-      break;
-    case MemoryAreaType::RODATA:
-      printf("RODATA, ");
-      break;
-    case MemoryAreaType::OTHER:
-      printf("OTHER, ");
-      break;
-    default:
-      printf("[ERROR] unknown memory area type, ");
-      abort();
-      break;
-    }
-    printf("name: %s, vma: 0x%016llx, len: %llu, bytes: 0x%016llx, upper_bytes: 0x%016llx, bytes_on_heap: %s, to_higher: %s\n",
-      memory->name.c_str(), memory->vma, memory->len, (addr_t)memory->bytes, (addr_t)memory->upper_bytes, memory->bytes_on_heap ? "true" : "false", memory->to_higher ? "true" : "false");
-  }
-}
 
 uint8_t __remill_read_memory_8(Memory *, addr_t addr){
   return *getMemoryAddr<uint8_t>(addr);
@@ -152,40 +75,74 @@ Memory * __remill_write_memory_f64(Memory *memory, addr_t addr, float64_t src){
 
 Memory *__remill_write_memory_f128(Memory *, addr_t, float128_t){ return nullptr; }
 
+/*
+  tranpoline call for emulating syscall of original ELF binary.
+*/
 Memory *__remill_syscall_tranpoline_call(State &state, Memory *memory) {
   /* TODO: We should select one syscall emulate process (own implementation, WASI, LKL, etc...) */
   __svc_call();
   return memory;
 }
 
-// Marks `mem` as being used. This is used for making sure certain symbols are
-// kept around through optimization, and makes sure that optimization doesn't
-// perform dead-argument elimination on any of the intrinsics.
+/* 
+  Marks `mem` as being used. This is used for making sure certain symbols are
+  kept around through optimization, and makes sure that optimization doesn't
+  perform dead-argument elimination on any of the intrinsics. 
+*/
 extern "C" void __remill_mark_as_used(void *mem) {
   asm("" ::"m"(mem));
 }
-
-/*
-  empty runtime helper function
-*/
 
 Memory *__remill_function_return(State &, addr_t, Memory *memory) {
   return memory;
 }
 
 Memory *__remill_missing_block(State &, addr_t, Memory *memory) {
-  printf("[WARNING] reached \"__remill_missing_block\"\n");
+  printf("[WARNING] reached \"__remill_missing_block\", PC: 0x%016llx\n", g_state.gpr.pc.qword);
   return memory;
 }
 
 Memory *__remill_async_hyper_call(State &, addr_t ret_addr, Memory *memory){ 
   return memory; 
 }
-// panic function for jumping to .plt section
+
+/* panic function for jumping to .plt section (FIXME) */
 Memory *__remill_panic_plt_jmp(State &, addr_t, Memory *) {
   printf("[ERROR] detect jumping to .plt section\n");
   fflush(stdout);
   abort();
+}
+
+Memory * __remill_error(State &, addr_t addr, Memory *){
+  printf("[WARNING] Reached __remill_error.\n");
+  debug_state_machine();
+  fflush(stdout);
+  abort();
+}
+
+/*
+  BLR instuction
+  The remill semantic sets X30 link register, so this only jumps to target function.
+*/
+Memory * __remill_function_call(State &state, addr_t fn_vma, Memory *memory){ 
+  if (auto jmp_fn = g_run_mgr->addr_fn_map[fn_vma]; jmp_fn) {
+    jmp_fn(&state, fn_vma, memory);
+  } else {
+    printf("[ERROR] vma 0x%016llx is not included in the lifted function pointer table.\n", fn_vma);
+    abort();
+  }
+  return memory;
+}
+
+/* BL instruction */
+Memory * __remill_jump(State &state, addr_t fn_vma, Memory *memory){
+  if (auto jmp_fn = g_run_mgr->addr_fn_map[fn_vma]; jmp_fn) {
+    jmp_fn(&state, fn_vma, memory);
+  } else {
+    printf("[ERROR] vma 0x%016llx is not included in the lifted function pointer table.\n", fn_vma);
+    abort();
+  }
+  return memory;
 }
 
 bool __remill_flag_computation_sign(bool result, ...){ return result; }
@@ -204,6 +161,19 @@ bool __remill_compare_uge(bool result){ return result; }
 bool __remill_compare_eq(bool result){ return result; }
 bool __remill_compare_neq(bool result){ return result; }
 
+/* Data Memory Barrier instruction (FIXME) */
+Memory * __remill_barrier_load_load(Memory *memory){ return memory; }
+Memory * __remill_barrier_load_store(Memory *memory){ return memory; }
+Memory * __remill_barrier_store_load(Memory *memory){ return memory; }
+Memory * __remill_barrier_store_store(Memory *memory){ return memory; }
+
+/* atomic */
+Memory * __remill_atomic_begin(Memory *memory) { return memory; }
+Memory *__remill_atomic_end(Memory *memory){ return memory; }
+
+/* FIXME */
+Memory *__remill_aarch64_emulate_instruction(Memory *memory){ return memory; }
+
 Memory *__remill_read_memory_f80(Memory *, addr_t, native_float80_t &){ UNDEFINED_INTRINSICS("__remill_read_memory_f80"); return nullptr; }
 Memory * __remill_write_memory_f80(Memory *, addr_t, const native_float80_t &){ UNDEFINED_INTRINSICS("__remill_") return nullptr; }
 
@@ -216,18 +186,6 @@ float64_t __remill_undefined_f64(void){ UNDEFINED_INTRINSICS("__remill_undefined
 float80_t __remill_undefined_f80(void){ UNDEFINED_INTRINSICS("__remill_undefined_f80"); return 0; }
 float128_t __remill_undefined_f128(void){ UNDEFINED_INTRINSICS("__remill_undefined_f128"); return 0; }
 
-Memory * __remill_error(State &, addr_t addr, Memory *){ UNDEFINED_INTRINSICS("__remill_error"); return 0; }
-Memory * __remill_function_call(State &, addr_t addr, Memory *){ UNDEFINED_INTRINSICS("__remill_function_call"); return 0; }
-// Memory *__remill_function_return(State &, addr_t addr, Memory *){ return 0; }
-Memory * __remill_jump(State &, addr_t addr, Memory *){ UNDEFINED_INTRINSICS("__remill_jump"); return 0; }
-// Memory *__remill_missing_block(State &, addr_t addr, Memory *){ return 0; }
-// Memory * __remill_sync_hyper_call(State &, Memory *, SyncHyperCall::Name){ return 0; }
-Memory * __remill_barrier_load_load(Memory *){ UNDEFINED_INTRINSICS("__remill_barrier_load_load"); return 0; }
-Memory * __remill_barrier_load_store(Memory *){ UNDEFINED_INTRINSICS("__remill_barrier_load_store"); return 0; }
-Memory * __remill_barrier_store_load(Memory *){ UNDEFINED_INTRINSICS("__remill_barrier_store_load"); return 0; }
-Memory * __remill_barrier_store_store(Memory *){ UNDEFINED_INTRINSICS("__remill_store_store"); return 0; }
-Memory * __remill_atomic_begin(Memory *) { UNDEFINED_INTRINSICS("__remill_atomic_begin"); return 0; }
-Memory *__remill_atomic_end(Memory *){ UNDEFINED_INTRINSICS("__remill_atomic_end"); return 0; }
 Memory *__remill_delay_slot_begin(Memory *){ UNDEFINED_INTRINSICS("__remill_delay_slot_begin"); return 0; }
 Memory *__remill_delay_slot_end(Memory *){ UNDEFINED_INTRINSICS("__remill_delay_slot_end"); return 0; }
 Memory *__remill_compare_exchange_memory_8(Memory *, addr_t addr, uint8_t &expected, uint8_t desired){ UNDEFINED_INTRINSICS("__remill_compare_exchange_memory_8"); return 0; }
@@ -286,7 +244,7 @@ Memory *__remill_amd64_set_control_reg_2(Memory *){ UNDEFINED_INTRINSICS("__remi
 Memory *__remill_amd64_set_control_reg_3(Memory *){ UNDEFINED_INTRINSICS("__remill_amd64_set_control_reg_3"); return 0; }
 Memory *__remill_amd64_set_control_reg_4(Memory *){ UNDEFINED_INTRINSICS("__remill_amd64_set_control_reg_4"); return 0; }
 Memory *__remill_amd64_set_control_reg_8(Memory *){ UNDEFINED_INTRINSICS("__remill_amd64_set_control_reg_8"); return 0; }
-Memory *__remill_aarch64_emulate_instruction(Memory *){ UNDEFINED_INTRINSICS("__remill_aarch64_emulate_instruction"); return 0; }
+
 Memory *__remill_aarch32_emulate_instruction(Memory *){UNDEFINED_INTRINSICS("__remill_aarch32_emulate_instruction");  return 0; }
 Memory *__remill_aarch32_check_not_el2(Memory *){ UNDEFINED_INTRINSICS("__remill_aarch32_check_not_el2"); return 0; }
 Memory *__remill_sparc_set_asi_register(Memory *){ UNDEFINED_INTRINSICS("__remill_sparc_set_asi_register"); return 0; }

@@ -12,6 +12,8 @@
 #include <queue>
 #include <map>
 #include <list>
+#include <libelf.h>
+#include <fcntl.h>
 
 namespace BinaryLoader {
 
@@ -66,6 +68,7 @@ namespace BinaryLoader {
 			ARCH_AARCH64 = 0,
 			ARCH_UNKNOWN = 1,
 		};
+		
 		struct FuncEntry {
 			uintptr_t entry;
 			std::string func_name;
@@ -105,12 +108,18 @@ namespace BinaryLoader {
 		std::vector<ELFSymbol> symbols;
 		std::unordered_map<std::string, CodeSection> code_sections;
 
+		uint64_t e_phent;
+		uint64_t e_phnum;
+		uint8_t *e_ph;
+
 	private:
 
 		void OpenELF();
 		void LoadELFBFD();
 		void LoadStaticSymbolsBFD();
+		void LoadDynamicSymbolsBFD();
 		void LoadSectionsBFD();
+		void GetEhdr();
 
 	};
 }

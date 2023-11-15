@@ -31,6 +31,7 @@
 #define AARCH64_SYS_SET_ROBUST_LIST 99
 #define AARCH64_SYS_CLOCK_GETTIME 113
 #define AARCH64_SYS_TGKILL 131
+#define AARCH64_SYS_RT_SIGACTION 134
 #define AARCH64_SYS_RT_SIGPROCMASK 135
 #define AARCH64_SYS_UNAME 160
 #define AARCH64_SYS_GETPID 172
@@ -47,11 +48,10 @@
 #define AARCH64_SYS_PRLIMIT64 261
 #define AARCH64_SYS_GETRANDOM 278
 #define AARCH64_SYS_STATX 291
+#define AARCH64_SYS_RSEQ 293
 
 #define _ECV_EACESS 13
 #define _ECV_ENOSYS 38
-
-// #define _ECV_VMA_INVALID 1
 
 /*
   for ioctl syscall
@@ -106,64 +106,6 @@ struct _ecv_statx {
 #define _ECV_STATX_BASIC_STATS 0x000007ffU
 
 /*
-  FIXME! we should get this from original ELF
-*/
-_ecv_reg_t _ecv_at_phent = 56;
-_ecv_reg_t _ecv_at_phnum = 7;
-
-/*
-  translate vma address to the actual mapped memory address.
-*/
-#if defined(_ECV_VMA_INVALID)
-  void *_ecv_translate_ptr(addr_t vma_addr) {
-    return reinterpret_cast<void*>(vma_addr);
-  }  
-#else
-  void *_ecv_translate_ptr(addr_t vma_addr) {
-    void *pma_addr = nullptr;
-    // search in every emulated memory
-    bool vma_allocated = false;
-    for(auto &memory : g_memorys->emulated_memorys) {
-      if (memory->vma == DUMMY_VMA) {
-        continue;
-      }
-      if ((memory->to_higher && memory->vma <= vma_addr && vma_addr < memory->vma + memory->len)
-            || (!memory->to_higher && memory->vma - memory->len <= vma_addr && vma_addr < memory->vma)) {
-        // allocate buffer to mapped memory
-        if (memory->bytes == NULL) {
-          uint64_t len = MAPPED_SIZE;
-          auto bytes = reinterpret_cast<uint8_t*>(malloc(len));
-          memset(bytes, 0, len);
-          memory = new EmulatedMemory(
-            MemoryAreaType::DATA,
-            "DUMMY",
-            DUMMY_VMA,
-            len,
-            bytes,
-            bytes + len,
-            true,
-            true
-          );
-          printf("[WARNING] caused new memory is allocated the original ELF don't know. addr: %llu\n", vma_addr);
-        }
-        vma_allocated = true;
-        pma_addr = reinterpret_cast<void*>(
-          memory->to_higher ?
-            (memory->bytes + (vma_addr - memory->vma)) : (memory->upper_bytes - (memory->vma - vma_addr))
-        );
-        break;
-      }
-    }
-    if (!vma_allocated) {
-      printf("[ERROR] We cannot translate vma_addr to pma_addr because it is out the range of any vma space. vma_addr: 0x%08llx\n", vma_addr);
-      abort();
-    }
-    
-    return pma_addr;
-  }
-#endif
-
-/*
   syscall emulate function
   
   Calling Conventions
@@ -174,7 +116,7 @@ void __svc_call(void) {
 
   auto &state_gpr = g_state.gpr;
   errno = 0;
-  
+  // printf("__svc_call started. syscall number: %u, PC: 0x%016llx\n", g_state.gpr.x8.dword, g_state.gpr.pc.qword);
   switch (state_gpr.x8.qword)
   {
     case AARCH64_SYS_IOCTL:  /* ioctl (unsigned int fd, unsigned int cmd, unsigned long arg) */
@@ -271,7 +213,7 @@ void __svc_call(void) {
       }
       break;
     case AARCH64_SYS_SET_ROBUST_LIST: /* set_robust_list (struct robust_list_head *head, size_t len) */
-      state_gpr.x0.qword = -1;
+      state_gpr.x0.qword = 0;
       errno = _ECV_ENOSYS;
       break;
     case AARCH64_SYS_CLOCK_GETTIME: /* clock_gettime (clockid_t which_clock, struct __kernel_timespace *tp) */
@@ -296,6 +238,11 @@ void __svc_call(void) {
     case AARCH64_SYS_RT_SIGPROCMASK: /* rt_sigprocmask (int how, sigset_t *set, sigset_t *oset, size_t sigsetsize) */
       /* TODO */
       state_gpr.x0.qword = 0;
+      break;
+    case AARCH64_SYS_RT_SIGACTION: /* rt_sigaction (int signum, const struct sigaction *act, struct sigaction *oldact) */
+      state_gpr.x0.dword = sigaction(state_gpr.x0.dword, 
+                                      (const struct sigaction*)_ecv_translate_ptr(state_gpr.x1.qword),
+                                      (struct sigaction*)_ecv_translate_ptr(state_gpr.x2.qword));
       break;
     case AARCH64_SYS_UNAME: /* uname (struct old_utsname* buf) */
       {
@@ -331,9 +278,19 @@ void __svc_call(void) {
 #endif
       break;
     case AARCH64_SYS_BRK: /* brk (unsigned long brk) */
-      /* TODO */
-      state_gpr.x0.qword = -1;
-      errno = _ECV_EACESS;
+    {
+      auto heap_memory = g_run_mgr->emulated_memorys[1];
+      if (state_gpr.x0.qword == 0) {
+        /* init program break (FIXME) */
+        state_gpr.x0.qword = heap_memory->heap_cur;
+      } else if (heap_memory->vma <= state_gpr.x0.qword && state_gpr.x0.qword < heap_memory->vma + heap_memory->len) {
+        /* change program break */
+        heap_memory->heap_cur = state_gpr.x0.qword;
+      } else {
+        printf("Unsupported brk(0x%016llx).\n", state_gpr.x0.qword);
+        abort();
+      }
+    }
       break;
     case AARCH64_SYS_MUNMAP: /* munmap (unsigned long addr, size_t len) */
       /* TODO */
@@ -341,7 +298,24 @@ void __svc_call(void) {
       break;
     case AARCH64_SYS_MMAP: /* mmap (void *start, size_t lengt, int prot, int flags, int fd, off_t offset) */
       /* TODO */
-      state_gpr.x0.qword = 0;
+    {
+      auto heap_memory = g_run_mgr->emulated_memorys[1];
+      if (state_gpr.x4.dword != -1) {
+        printf("Unsupported mmap (X4=0x%08ld)\n", state_gpr.x4.dword);
+        abort();
+      }
+      if (state_gpr.x5.dword != 0) {
+        printf("Unsupported mmap (X5=0x%016lld)\n", state_gpr.x5.qword);
+        abort();
+      }
+      if (state_gpr.x0.qword == 0) {
+        state_gpr.x0.qword = heap_memory->heap_cur;
+        heap_memory->heap_cur += state_gpr.x1.qword;
+      } else {
+        printf("Unsupported mmap (X0=0x%016llx)\n", state_gpr.x0.qword);
+        abort();
+      }
+    }
       break;
     case AARCH64_SYS_MPROTECT: /* mprotect (unsigned long start, size_t len, unsigned long prot) */
       state_gpr.x0.qword = 0;
@@ -350,7 +324,15 @@ void __svc_call(void) {
       state_gpr.x0.qword = 0;
       break;
     case AARCH64_SYS_GETRANDOM: /* getrandom (char *buf, size_t count, unsigned int flags) */
-      state_gpr.x0.dword = getentropy(_ecv_translate_ptr(state_gpr.x0.qword), static_cast<size_t>(state_gpr.x1.qword));
+    {
+      auto res = getentropy(_ecv_translate_ptr(state_gpr.x0.qword), static_cast<size_t>(state_gpr.x1.qword));
+      if (res == 0) {
+        state_gpr.x0.qword = state_gpr.x1.qword;
+      } else {
+        state_gpr.x0.qword = -1;
+        errno = _ECV_ENOSYS;
+      }
+    }
       break;
     case AARCH64_SYS_STATX: /* statx (int dfd, const char *path, unsigned flags, unsigned mask, struct statx *buffer) */
       {
@@ -385,8 +367,12 @@ void __svc_call(void) {
         }
       }
       break;
+    case AARCH64_SYS_RSEQ:
+      /* TODO */
+      state_gpr.x0.qword = 0;
+      break;
     default:
-      printf("Unknown syscall number: %llu\n", state_gpr.x7.qword);
+      printf("Unknown syscall number: %lu, PC: 0x%llx\n", state_gpr.x8.qword, state_gpr.pc.qword);
       abort();
       break;
   }

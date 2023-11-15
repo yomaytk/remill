@@ -80,11 +80,49 @@ DEF_SEM(DoMSR_SR_SYSTEM_TPIDR_EL0, R64 src) {
   return memory;
 }
 
+DEF_SEM(DoMRS_RS_SYSTEM_CTR_EL0, R64W dest) {
+  WriteZExt(dest, Read(state.sr.ctr_el0));
+  return memory;
+}
+
+DEF_SEM(DoMSR_SR_SYSTEM_CTR_EL0, R64 src) {
+  WriteZExt(state.sr.ctr_el0.qword, Read(src));
+  return memory;
+}
+
+DEF_SEM(DoMRS_RS_SYSTEM_DCZID_EL0, R64W dest) {
+  WriteZExt(dest, Read(state.sr.dczid_el0));
+  return memory;
+}
+
+DEF_SEM(DoMSR_SR_SYSTEM_DCZID_EL0, R64 src) {
+  WriteZExt(state.sr.dczid_el0.qword, Read(src));
+  return memory;
+}
+
+DEF_SEM(DoMRS_RS_SYSTEM_MIDR_EL1, R64W dest) {
+  WriteZExt(dest, Read(state.sr.midr_el1));
+  return memory;
+}
+
+DEF_SEM(DoMSR_SR_SYSTEM_MIDR_EL1, R64 src) {
+  WriteZExt(state.sr.midr_el1.qword, Read(src));
+  return memory;
+}
+
 DEF_SEM(DataMemoryBarrier) {
 
   // TODO(pag): Full-system data memory barrier probably requires a synchronous
   //            hypercall if it behaves kind of like Linux's `sys_membarrier`.
   return __remill_barrier_store_store(memory);
+}
+
+DEF_SEM(FIXME_PC_NOP, R64W) {
+  return memory;
+}
+
+DEF_SEM(FIXME_NOP) {
+  return memory;
 }
 
 }  // namespace
@@ -101,4 +139,18 @@ DEF_ISEL(MSR_SR_SYSTEM_FPCR) = DoMSR_SR_SYSTEM_FPCR;
 DEF_ISEL(MRS_RS_SYSTEM_TPIDR_EL0) = DoMRS_RS_SYSTEM_TPIDR_EL0;
 DEF_ISEL(MSR_SR_SYSTEM_TPIDR_EL0) = DoMSR_SR_SYSTEM_TPIDR_EL0;
 
+DEF_ISEL(MRS_RS_SYSTEM_CTR_EL0) = DoMRS_RS_SYSTEM_CTR_EL0;
+DEF_ISEL(MSR_SR_SYSTEM_CTR_EL0) = DoMSR_SR_SYSTEM_CTR_EL0;
+
+DEF_ISEL(MRS_RS_SYSTEM_DCZID_EL0) = DoMRS_RS_SYSTEM_DCZID_EL0;
+DEF_ISEL(MSR_SR_SYSTEM_DCZID_EL0) = DoMSR_SR_SYSTEM_DCZID_EL0;
+
+DEF_ISEL(MRS_RS_SYSTEM_MIDR_EL1) = DoMRS_RS_SYSTEM_MIDR_EL1;
+DEF_ISEL(MSR_SR_SYSTEM_MIDR_EL1) = DoMSR_SR_SYSTEM_MIDR_EL1;
+
 DEF_ISEL(DMB_BO_SYSTEM) = DataMemoryBarrier;
+
+/* FIXME */
+DEF_ISEL(DC_SYS_CR_SYSTEM) = FIXME_PC_NOP;
+
+DEF_ISEL(PRFM_P_LDST_POS) = FIXME_NOP;

@@ -348,9 +348,10 @@ MAKE_MREADV(F, 80, tdoubles, f80)
 
 #undef MAKE_MREADV
 
+// MAKE_WRITEV(U, 16, words, VnW, uint16_t)
 #define MAKE_WRITEV(prefix, size, accessor, kind, base_type) \
   template <typename T> \
-  ALWAYS_INLINE static Memory *_##prefix##WriteV##size( \
+  ALWAYS_INLINE static Memory /* _UWriteV16 */ *_##prefix##WriteV##size( \
       Memory *memory, kind<T> vec, base_type val) { \
     auto &sub_vec = reinterpret_cast<T *>(vec.val_ref)->accessor; \
     sub_vec.elems[0] = val; \
@@ -361,7 +362,7 @@ MAKE_MREADV(F, 80, tdoubles, f80)
   } \
 \
   template <typename T, typename V> \
-  ALWAYS_INLINE static Memory *_##prefix##WriteV##size( \
+  ALWAYS_INLINE static Memory /* _UWriteV16 */ *_##prefix##WriteV##size( \
       Memory *memory, kind<T> vec, const V &val) { \
     static_assert(sizeof(T) >= sizeof(V), "Object to WriteV is too big."); \
     typedef decltype(T().accessor.elems[0]) BT; \
@@ -417,6 +418,7 @@ MAKE_WRITEV(F, 80, tdoubles, RVnW, float80_t)
 
 #undef MAKE_WRITEV
 
+// MAKE_MWRITEV(U, 128, dqwords, 128, uint128_t)
 #define MAKE_MWRITEV(prefix, size, vec_accessor, mem_accessor, base_type) \
   template <typename T> \
   ALWAYS_INLINE static Memory *_##prefix##WriteV##size( \

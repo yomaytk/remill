@@ -335,9 +335,15 @@ float64_t __remill_undefined_f64(void) {
   return 0.0;
 }
 
-float80_t __remill_undefined_f80(void) {
-  return {0};
-}
+#if 1
+  float64_t __remill_undefined_f80(void) {
+    return {0};
+  }
+#else
+  float80_t __remill_undefined_f80(void) {
+    return {0};
+  }
+#endif
 
 float128_t __remill_undefined_f128(void) {
   return {0};

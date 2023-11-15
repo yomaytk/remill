@@ -100,6 +100,11 @@ DEF_SEM(UMADDL, R64W dst, R32 src1, R32 src2, R64 src3) {
   return memory;
 }
 
+DEF_SEM(UMSUBL, R64W dst, R32 src1, R32 src2, R64 src3) {
+  Write(dst, USub(Read(src3), UMul(ZExt(Read(src1)), ZExt(Read(src2)))));
+  return memory;
+}
+
 DEF_SEM(SMADDL, R64W dst, R32 src1, R32 src2, R64 src3) {
   auto operand1 = SExt(Signed(Read(src1)));
   auto operand2 = SExt(Signed(Read(src2)));
@@ -167,6 +172,8 @@ DEF_SEM(MSUB, D dst, S src1, S src2, S src3) {
 DEF_ISEL(UMADDL_64WA_DP_3SRC) = UMADDL;
 DEF_ISEL(SMADDL_64WA_DP_3SRC) = SMADDL;
 
+DEF_ISEL(UMSUBL_64WA_DP_3SRC) = UMSUBL;
+
 DEF_ISEL(UMULH_64_DP_3SRC) = UMULH;
 DEF_ISEL(SMULH_64_DP_3SRC) = SMULH;
 
@@ -200,6 +207,22 @@ DEF_SEM(SBCS, D dst, S src1, S src2) {
   return memory;
 }
 
+template <typename D, typename S>
+DEF_SEM(ADC, D dst, S src1, S src2) {
+  auto carry = ZExtTo<S>(Unsigned(FLAG_C));
+  WriteZExt(dst, UAdd(UAdd(Read(src1), Read(src2)), carry));
+  return memory;
+}
+
+// template <typename D, typename S>
+// DEF_SEM(ADCS, D dst, S src1, S src2) {
+//   auto carry = ZExtTo<S>(Unsigned(FLAG_C));
+//   auto res =
+//       AddWithCarryNZCV(state, Read(src1), Read(src2), Read(src2), carry);
+//   WriteZExt(dst, res);
+//   return memory;
+// }
+
 }  // namespace
 
 DEF_ISEL(SBC_32_ADDSUB_CARRY) = SBC<R32W, R32>;
@@ -207,6 +230,9 @@ DEF_ISEL(SBC_64_ADDSUB_CARRY) = SBC<R64W, R64>;
 
 DEF_ISEL(SBCS_32_ADDSUB_CARRY) = SBCS<R32W, R32>;
 DEF_ISEL(SBCS_64_ADDSUB_CARRY) = SBCS<R64W, R64>;
+
+DEF_ISEL(ADC_32_ADDSUB_CARRY) = ADC<R32W, R32>;
+DEF_ISEL(ADC_64_ADDSUB_CARRY) = ADC<R64W, R64>;
 
 namespace {
 

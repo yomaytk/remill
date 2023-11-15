@@ -28,6 +28,8 @@
 #include <llvm/IR/Module.h>
 #pragma clang diagnostic pop
 
+#define LIFT_DEBUG 1
+
 // clang-format on
 
 #include <remill/BC/ABI.h>

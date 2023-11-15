@@ -246,30 +246,39 @@ struct alignas(8) SR final {
   uint64_t _1;
   Reg tpidrro_el0;  // Read-only thread pointer for EL0.
 
-  uint8_t _2;
-  uint8_t n;  //  Negative condition flag.
-  uint8_t _3;
-  uint8_t z;  //  Zero condition flag
-  uint8_t _4;
-  uint8_t c;  //  Carry condition flag
+  uint64_t _2;
+  Reg ctr_el0;    // Cache Type Register
+
+  uint64_t _3;
+  Reg dczid_el0;  // Data Cache Zero ID Register
+
+  uint64_t _4;
+  Reg midr_el1;   // Main ID Register
+
   uint8_t _5;
+  uint8_t n;  //  Negative condition flag.
+  uint8_t _6;
+  uint8_t z;  //  Zero condition flag
+  uint8_t _7;
+  uint8_t c;  //  Carry condition flag
+  uint8_t _8;
   uint8_t v;  //  Overflow condition flag
 
-  uint8_t _6;
-  uint8_t ixc;  // Inexact (cumulative).
-  uint8_t _7;
-  uint8_t ofc;  // Overflow (cumulative).
-  uint8_t _8;
-  uint8_t ufc;  // Underflow (cumulative).
   uint8_t _9;
-  uint8_t idc;  // Input denormal (cumulative).
+  uint8_t ixc;  // Inexact (cumulative).
   uint8_t _10;
+  uint8_t ofc;  // Overflow (cumulative).
+  uint8_t _11;
+  uint8_t ufc;  // Underflow (cumulative).
+  uint8_t _12;
+  uint8_t idc;  // Input denormal (cumulative).
+  uint8_t _13;
   uint8_t ioc;  // Invalid operation (cumulative).
 
   uint8_t _padding[6];
 } __attribute__((packed));
 
-static_assert(56 == sizeof(SR), "Invalid packing of `struct SR`.");
+static_assert(104 == sizeof(SR), "Invalid packing of `struct SR`.");
 
 enum : size_t { kNumVecRegisters = 32 };
 
@@ -323,13 +332,13 @@ struct alignas(16) AArch64State : public ArchState {
 
   uint64_t _3;
 
-  SleighFlagState sleigh_flags;
+  SleighFlagState sleigh_flags; // 24 bytes.
 
   uint8_t padding[8];
 
 } __attribute__((packed));
 
-static_assert((1152 + 16 + 24 + 8) == sizeof(AArch64State),
+static_assert((1200 /* simd ~ _3 */ + 16 /* ArchState */ + 24 /* sleigh_flags */ + 8 /* padding */) == sizeof(AArch64State),
               "Invalid packing of `struct State`");
 
 struct State : public AArch64State {};

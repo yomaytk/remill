@@ -68,19 +68,27 @@ DEF_SEM(STP_D, V64 src1, V64 src2, MV128W dst) {
   return memory;
 }
 
-// MvW type isnt supported
-// remill/remill/Arch/Runtime/Operators.h:437:1: error: static_assert failed "Invalid value size for MVnW."
-// MAKE_MWRITEV(U, 128, dqwords, 128, uint128_t)
+DEF_SEM(STP_Q, V128 src1, V128 src2, MV256W dst) {
+  auto src1_vec = UReadV128(src1);
+  auto src2_vec = UReadV128(src2);
+  uint128v2_t tmp_vec = {};
+  tmp_vec = UInsertV128(tmp_vec, 0, UExtractV128(src1_vec, 0));
+  tmp_vec = UInsertV128(tmp_vec, 1, UExtractV128(src2_vec, 0));
+  UWriteV128(dst, tmp_vec);
+  return memory;
+}
 
-// DEF_SEM(STP_Q, V128 src1, V128 src2, MV128W dst) {
-//   auto src1_vec = UReadV128(src1);
-//   auto src2_vec = UReadV128(src2);
-//   uint128v2_t tmp_vec = {};
-//   tmp_vec = UInsertV128(tmp_vec, 0, UExtractV128(src1_vec, 0));
-//   tmp_vec = UInsertV128(tmp_vec, 1, UExtractV128(src2_vec, 0));
-//   UWriteV128(dst, tmp_vec);
-//   return memory;
-// }
+DEF_SEM(STP_Q_UPDATE_ADDR, V128 src1, V128 src2, MV256W dst, R64W dst_reg, ADDR next_addr) {
+  auto src1_vec = UReadV128(src1);
+  auto src2_vec = UReadV128(src2);
+  uint128v2_t tmp_vec = {};
+  tmp_vec = UInsertV128(tmp_vec, 0, UExtractV128(src1_vec, 0));
+  tmp_vec = UInsertV128(tmp_vec, 1, UExtractV128(src2_vec, 0));
+  UWriteV128(dst, tmp_vec);
+  Write(dst_reg, Read(next_addr));
+  return memory;
+}
+
 }  // namespace
 
 DEF_ISEL(STP_32_LDSTPAIR_PRE) = StorePairUpdateIndex32;
@@ -95,7 +103,9 @@ DEF_ISEL(STP_64_LDSTPAIR_OFF) = StorePair64;
 DEF_ISEL(STP_S_LDSTPAIR_OFF) = STP_S;
 DEF_ISEL(STP_D_LDSTPAIR_OFF) = STP_D;
 
-// DEF_ISEL(STP_Q_LDSTPAIR_OFF) = STP_Q;
+DEF_ISEL(STP_Q_LDSTPAIR_OFF) = STP_Q;
+DEF_ISEL(STP_Q_LDSTPAIR_PRE) = STP_Q_UPDATE_ADDR;
+DEF_ISEL(STP_Q_LDSTPAIR_POST) = STP_Q_UPDATE_ADDR;
 
 namespace {
 
@@ -125,6 +135,37 @@ DEF_SEM(StoreRelease, S src, D dst) {
   return memory;
 }
 
+DEF_SEM(STR_Q_UPDATE_ADDR, V128 src, MV128W dst, R64W dst_reg, ADDR next_addr) {
+  auto src_vec = UReadV128(src);
+  uint128v1_t tmp_vec = {};
+  tmp_vec = UInsertV128(tmp_vec, 0, UExtractV128(src_vec, 0));
+  UWriteV128(dst, tmp_vec);
+  Write(dst_reg, Read(next_addr));
+  return memory;
+}
+
+/* S1: <W|X>.s, D1: <W|X>.t, S2: Xn, D2: Xn */
+template<typename S1, typename D1, typename S2, typename D2>
+DEF_SEM(SWP_MEMOP, S1 src1, D1 dst1, S2 src2, D2 dst2) {
+  WriteZExt(dst1, Read(src2));
+  WriteTrunc(dst2, Read(src1));
+  return memory;
+}
+
+template<typename S, typename D>
+DEF_SEM(LDADD_MEMOP, S src1, S src2, D dst) {
+  WriteZExt(src2, Read(dst));
+  WriteTrunc(dst, UAdd(Read(src1), Read(src2)));
+  return memory;
+}
+
+template<typename S, typename D>
+DEF_SEM(LDSET_MEMOP, S src1, S src2, D dst) {
+  WriteZExt(src2, Read(dst));
+  WriteTrunc(dst, UOr(Read(src1), Read(src2)));
+  return memory;
+}
+
 }  // namespace
 
 DEF_ISEL(STR_32_LDST_IMMPRE) = StoreUpdateIndex<R32, M32W>;
@@ -137,6 +178,7 @@ DEF_ISEL(STR_32_LDST_POS) = Store<R32, M32W>;
 DEF_ISEL(STR_64_LDST_POS) = Store<R64, M64W>;
 
 DEF_ISEL(STLR_SL32_LDSTEXCL) = StoreRelease<R32, M32W>;
+DEF_ISEL(STLR_SL64_LDSTEXCL) = StoreRelease<R64, M64W>;
 
 DEF_ISEL(STRB_32_LDST_POS) = Store<R32, M8W>;
 DEF_ISEL(STRB_32_LDST_IMMPOST) = StoreUpdateIndex<R32, M8W>;
@@ -151,6 +193,39 @@ DEF_ISEL(STRH_32_LDST_POS) = Store<R32, M16W>;
 
 DEF_ISEL(STR_32_LDST_REGOFF) = StoreToOffset<R32, M32W>;
 DEF_ISEL(STR_64_LDST_REGOFF) = StoreToOffset<R64, M64W>;
+
+DEF_ISEL(SWP_32_MEMOP) = SWP_MEMOP<R32, R32W, M32, M32W>;
+DEF_ISEL(SWP_64_MEMOP) = SWP_MEMOP<R64, R64W, M64, M64W>;
+
+DEF_ISEL(SWPA_32_MEMOP) = SWP_MEMOP<R32, R32W, M32, M32W>;
+DEF_ISEL(SWPA_64_MEMOP) = SWP_MEMOP<R64, R64W, M64, M64W>;
+
+DEF_ISEL(SWPL_32_MEMOP) = SWP_MEMOP<R32, R32W, M32, M32W>;
+DEF_ISEL(SWPL_64_MEMOP) = SWP_MEMOP<R64, R64W, M64, M64W>;
+
+DEF_ISEL(LDADD_32_MEMOP) = LDADD_MEMOP<R32W, M32W>;
+DEF_ISEL(LDADD_64_MEMOP) = LDADD_MEMOP<R64W, M64W>;
+
+DEF_ISEL(LDADDA_32_MEMOP) = LDADD_MEMOP<R32W, M32W>;
+DEF_ISEL(LDADDA_64_MEMOP) = LDADD_MEMOP<R64W, M64W>;
+
+DEF_ISEL(LDADDL_32_MEMOP) = LDADD_MEMOP<R32W, M32W>;
+DEF_ISEL(LDADDL_64_MEMOP) = LDADD_MEMOP<R64W, M64W>;
+
+DEF_ISEL(LDADDAL_32_MEMOP) = LDADD_MEMOP<R32W, M32W>;
+DEF_ISEL(LDADDAL_64_MEMOP) = LDADD_MEMOP<R64W, M64W>;
+
+DEF_ISEL(LDSET_32_MEMOP) = LDSET_MEMOP<R32W, M32W>;
+DEF_ISEL(LDSET_64_MEMOP) = LDSET_MEMOP<R64W, M64W>;
+
+DEF_ISEL(LDSETA_32_MEMOP) = LDSET_MEMOP<R32W, M32W>;
+DEF_ISEL(LDSETA_64_MEMOP) = LDSET_MEMOP<R64W, M64W>;
+
+DEF_ISEL(LDSETL_32_MEMOP) = LDSET_MEMOP<R32W, M32W>;
+DEF_ISEL(LDSETL_64_MEMOP) = LDSET_MEMOP<R64W, M64W>;
+
+DEF_ISEL(LDSETAL_32_MEMOP) = LDSET_MEMOP<R32W, M32W>;
+DEF_ISEL(LDSETAL_64_MEMOP) = LDSET_MEMOP<R64W, M64W>;
 
 namespace {
 
@@ -315,6 +390,19 @@ DEF_SEM(STLXR, R32W dst1, S src1, D dst2, R64W monitor) {
   return memory;
 }
 
+template <typename S, typename D>
+DEF_SEM(STXR, R32W dst1, S src1, D dst2, R64W monitor) {
+  auto old_addr = Read(monitor);
+  if (old_addr == AddressOf(dst2)) {
+    WriteZExt(dst2, Read(src1));
+    WriteZExt(dst1, 0_u32);  // Store succeeded.
+  } else {
+    WriteZExt(dst1, 1_u32);  // Store failed.
+  }
+  Write(monitor, 0_u64);
+  memory = __remill_barrier_store_store(memory);
+  return memory;
+}
 
 }  // namespace
 
@@ -324,6 +412,8 @@ DEF_ISEL(LDAXR_LR32_LDSTEXCL) = LDAXR<R32W, M32>;
 DEF_ISEL(LDAXR_LR64_LDSTEXCL) = LDAXR<R64W, M64>;
 DEF_ISEL(STLXR_SR32_LDSTEXCL) = STLXR<R32, M32W>;
 DEF_ISEL(STLXR_SR64_LDSTEXCL) = STLXR<R64, M64W>;
+DEF_ISEL(STXR_SR32_LDSTEXCL) = STXR<R32, M32W>;
+DEF_ISEL(STXR_SR64_LDSTEXCL) = STXR<R64, M64W>;
 
 namespace {
 
@@ -350,6 +440,7 @@ DEF_SEM(LoadSExtFromOffset, D dst, M base, ADDR offset) {
 
 DEF_ISEL(LDURSB_32_LDST_UNSCALED) = LoadSExt<R32W, M8, int32_t>;
 DEF_ISEL(LDURSH_32_LDST_UNSCALED) = LoadSExt<R32W, M16, int32_t>;
+DEF_ISEL(LDURSH_64_LDST_UNSCALED) = LoadSExt<R64W, M16, int64_t>;
 DEF_ISEL(LDURSW_64_LDST_UNSCALED) = LoadSExt<R64W, M32, int64_t>;
 
 DEF_ISEL(LDRSB_32_LDST_POS) = LoadSExt<R32W, M8, int32_t>;
@@ -716,6 +807,7 @@ DEF_ISEL(STUR_Q_LDST_UNSCALED) = STR_Q;
 DEF_ISEL(STR_Q_LDST_REGOFF) = STR_Q_FromOffset;
 
 DEF_ISEL(STR_Q_LDST_IMMPRE) = STR_Q_UpdateIndex;
+DEF_ISEL(STR_Q_LDST_IMMPOST) = STR_Q_UpdateIndex;
 
 namespace {
 
@@ -1317,8 +1409,8 @@ DEF_SEM(MOVI_D2, V128W dst, I64 src) {
   return memory;
 }
 
-template <typename V>
-DEF_SEM(MOVI_N_B, V128W dst, I8 src) {
+template <typename V, typename VNW>
+DEF_SEM(MOVI_N_B, VNW dst, I8 src) {
   auto imm = Read(src);
   V res = {};
   _Pragma("unroll") for (auto &elem : res.elems) {
@@ -1328,8 +1420,8 @@ DEF_SEM(MOVI_N_B, V128W dst, I8 src) {
   return memory;
 }
 
-template <typename V>
-DEF_SEM(MOVI_L_HL, V128W dst, I16 src) {
+template <typename V, typename VNW>
+DEF_SEM(MOVI_L_HL, VNW dst, I16 src) {
   auto imm = Read(src);
   V res = {};
   _Pragma("unroll") for (auto &elem : res.elems) {
@@ -1339,8 +1431,8 @@ DEF_SEM(MOVI_L_HL, V128W dst, I16 src) {
   return memory;
 }
 
-template <typename V>
-DEF_SEM(MOVI_L_SL, V128W dst, I32 src) {
+template <typename V, typename VNW>
+DEF_SEM(MOVI_L_SL, VNW dst, I32 src) {
   auto imm = Read(src);
   V res = {};
   _Pragma("unroll") for (auto &elem : res.elems) {
@@ -1358,22 +1450,76 @@ DEF_SEM(MOVI_DS, V128W dst, I64 src) {
   return memory;
 }
 
+template <typename V, typename VNW>
+DEF_SEM(BIC_L_HL, VNW dst, I16 src) {
+  auto imm = Read(src);
+  V res = {};
+  res = UInsertV16(res, 0, imm);
+  res = UInsertV16(res, 1, imm);
+  res = UInsertV16(res, 2, imm);
+  res = UInsertV16(res, 3, imm);
+  UWriteV16(dst, res);
+  return memory;
+}
+
+template <typename V, typename VNW>
+DEF_SEM(BIC_L_SL, VNW dst, I32 src) {
+  auto imm = Read(src);
+  V res = {};
+  _Pragma("unroll") for (auto &elem : res.elems) {
+    elem = elem & (~imm);
+  }
+  UWriteV32(dst, res);
+  return memory;
+}
+
 }  // namespace
 
 DEF_ISEL(MOVI_ASIMDIMM_D2_D) = MOVI_D2;
-DEF_ISEL(MOVI_ASIMDIMM_N_B_8B) = MOVI_N_B<uint8v8_t>;
-DEF_ISEL(MOVI_ASIMDIMM_N_B_16B) = MOVI_N_B<uint8v16_t>;
-DEF_ISEL(MOVI_ASIMDIMM_L_HL_4H) = MOVI_L_HL<uint16v4_t>;
-DEF_ISEL(MOVI_ASIMDIMM_L_HL_8H) = MOVI_L_HL<uint16v8_t>;
-DEF_ISEL(MOVI_ASIMDIMM_L_SL_2S) = MOVI_L_SL<uint32v2_t>;
-DEF_ISEL(MOVI_ASIMDIMM_L_SL_4S) = MOVI_L_SL<uint32v4_t>;
-DEF_ISEL(MOVI_ASIMDIMM_M_SM_2S) = MOVI_L_SL<uint32v2_t>;
-DEF_ISEL(MOVI_ASIMDIMM_M_SM_4S) = MOVI_L_SL<uint32v4_t>;
+DEF_ISEL(MOVI_ASIMDIMM_N_B_8B) = MOVI_N_B<uint8v8_t, V64W>;
+DEF_ISEL(MOVI_ASIMDIMM_N_B_16B) = MOVI_N_B<uint8v16_t, V128W>;
+DEF_ISEL(MOVI_ASIMDIMM_L_HL_4H) = MOVI_L_HL<uint16v4_t, V64W>;
+DEF_ISEL(MOVI_ASIMDIMM_L_HL_8H) = MOVI_L_HL<uint16v8_t, V128W>;
+DEF_ISEL(MOVI_ASIMDIMM_L_SL_2S) = MOVI_L_SL<uint32v2_t, V64W>;
+DEF_ISEL(MOVI_ASIMDIMM_L_SL_4S) = MOVI_L_SL<uint32v4_t, V128W>;
+DEF_ISEL(MOVI_ASIMDIMM_M_SM_2S) = MOVI_L_SL<uint32v2_t, V64W>;
+DEF_ISEL(MOVI_ASIMDIMM_M_SM_4S) = MOVI_L_SL<uint32v4_t, V128W>;
 DEF_ISEL(MOVI_ASIMDIMM_D_DS) = MOVI_DS;
 
-DEF_ISEL(MVNI_ASIMDIMM_L_HL_4H) = MOVI_L_HL<uint16v4_t>;
-DEF_ISEL(MVNI_ASIMDIMM_L_HL_8H) = MOVI_L_HL<uint16v8_t>;
-DEF_ISEL(MVNI_ASIMDIMM_L_SL_2S) = MOVI_L_SL<uint32v2_t>;
-DEF_ISEL(MVNI_ASIMDIMM_L_SL_4S) = MOVI_L_SL<uint32v4_t>;
-DEF_ISEL(MVNI_ASIMDIMM_M_SM_2S) = MOVI_L_SL<uint32v2_t>;
-DEF_ISEL(MVNI_ASIMDIMM_M_SM_4S) = MOVI_L_SL<uint32v4_t>;
+DEF_ISEL(MVNI_ASIMDIMM_L_HL_4H) = MOVI_L_HL<uint16v4_t, V64W>;
+DEF_ISEL(MVNI_ASIMDIMM_L_HL_8H) = MOVI_L_HL<uint16v8_t, V128W>;
+DEF_ISEL(MVNI_ASIMDIMM_L_SL_2S) = MOVI_L_SL<uint32v2_t, V64W>;
+DEF_ISEL(MVNI_ASIMDIMM_L_SL_4S) = MOVI_L_SL<uint32v4_t, V128W>;
+DEF_ISEL(MVNI_ASIMDIMM_M_SM_2S) = MOVI_L_SL<uint32v2_t, V64W>;
+DEF_ISEL(MVNI_ASIMDIMM_M_SM_4S) = MOVI_L_SL<uint32v4_t, V128W>;
+
+DEF_ISEL(BIC_ASIMDIMM_L_HL_4H) = BIC_L_HL<uint16v4_t, V64W>;
+DEF_ISEL(BIC_ASIMDIMM_L_HL_8H) = BIC_L_HL<uint16v8_t, V128W>;
+DEF_ISEL(BIC_ASIMDIMM_L_SL_2S) = BIC_L_SL<uint32v2_t, V64W>;
+DEF_ISEL(BIC_ASIMDIMM_L_SL_4S) = BIC_L_SL<uint32v4_t, V128W>;
+
+/* casa instruction semantics (FIXME: no atomic) */
+namespace {
+template <typename S, typename D>
+DEF_SEM(CAS, S src1, S src2, D dst) {
+  using T = typename BaseType<S>::BT;
+  T org_val = Read(dst);
+  T cmp_val = Read(src1);
+  auto cond_eq = UCmpEq(org_val, cmp_val);
+  auto new_val = Select<T>(cond_eq, Read(src2), org_val);
+  WriteTrunc(dst, new_val);
+  return memory;
+}
+}
+
+DEF_ISEL(CAS_C32_LDSTEXCL) = CAS<R32, M32W>;
+DEF_ISEL(CAS_C64_LDSTEXCL) = CAS<R64, M64W>;
+
+DEF_ISEL(CASA_C32_LDSTEXCL) = CAS<R32, M32W>;
+DEF_ISEL(CASA_C64_LDSTEXCL) = CAS<R64, M64W>;
+
+DEF_ISEL(CASAL_C32_LDSTEXCL) = CAS<R32, M32W>;
+DEF_ISEL(CASAL_C64_LDSTEXCL) = CAS<R64, M64W>;
+
+DEF_ISEL(CASL_C32_LDSTEXCL) = CAS<R32, M32W>;
+DEF_ISEL(CASL_C64_LDSTEXCL) = CAS<R64, M64W>;

@@ -396,5 +396,8 @@ void AArch64ArchBase::PopulateRegisterTable(void) const {
 
   REG(TPIDR_EL0, sr.tpidr_el0.qword, u64);
   REG(TPIDRRO_EL0, sr.tpidrro_el0.qword, u64);
+  REG(CTR_EL0, sr.ctr_el0.qword, u64);
+  REG(DCZID_EL0, sr.dczid_el0.qword, u64);
+  REG(MIDR_EL0, sr.midr_el1.qword, u64);
 }
 }  // namespace remill

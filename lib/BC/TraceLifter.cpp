@@ -72,8 +72,8 @@ class TraceLifter::Impl {
 
   // Lift one or more traces starting from `addr`. Calls `callback` with each
   // lifted trace.
-  bool Lift(uint64_t addr,
-            std::function<void(uint64_t, llvm::Function *)> callback);
+  bool Lift(uint64_t addr, const char* fn_name = "",
+            std::function<void(uint64_t, llvm::Function *)> callback = NullCallback);
 
   // Reads the bytes of an instruction at `addr` into `state.inst_bytes`.
   bool ReadInstructionBytes(uint64_t addr);
@@ -109,6 +109,24 @@ class TraceLifter::Impl {
 
   // Set data sections
   llvm::GlobalVariable *SetDataSections(std::vector<BinaryLoader::ELFSection> &sections);
+
+  /* Set ELF program header info */
+  llvm::GlobalVariable *SetELFPhdr(uint64_t e_phent, uint64_t e_phnum, uint8_t *e_ph);
+
+  /* Set platform name */
+  llvm::GlobalVariable *SetPlatform(const char *platform_name);
+
+  /* Set lifted function pointer table */
+  llvm::GlobalVariable *SetLiftedFunPtrTable(std::unordered_map<uint64_t, const char *> &addr_fun_map);
+
+  /* Set control flow debug list */
+  void SetControlFlowDebugList(std::unordered_map<uint64_t, bool> &__control_flow_debug_list);
+  
+  /* Declare debug_state_machine function */
+  llvm::Function *DeclareDebugStateMachine();
+
+  /* Declare debug_pc function */
+  llvm::Function *DeclareDebugPC();
 
   llvm::BasicBlock *GetOrCreateBlock(uint64_t block_pc) {
     auto &block = blocks[block_pc];
@@ -163,6 +181,7 @@ class TraceLifter::Impl {
   std::string inst_bytes;
   Instruction inst;
   Instruction delayed_inst;
+  std::unordered_map<uint64_t, bool> control_flow_debug_list;
   DecoderWorkList trace_work_list;
   DecoderWorkList inst_work_list;
   std::map<uint64_t, llvm::BasicBlock *> blocks;
@@ -173,6 +192,14 @@ class TraceLifter::Impl {
   std::string data_sec_size_array_name;
   std::string data_sec_bytes_array_name;
   std::string data_sec_num_name;
+  std::string e_phent_name;
+  std::string e_phnum_name;
+  std::string e_ph_name;
+  std::string g_platform_name;
+  std::string g_addr_list_name;
+  std::string g_fun_ptr_table_name;
+  std::string debug_state_machine_name;
+  std::string debug_pc_name;
 };
 
 TraceLifter::Impl::Impl(const Arch *arch_, TraceManager *manager_)
@@ -195,7 +222,15 @@ TraceLifter::Impl::Impl(const Arch *arch_, TraceManager *manager_)
       data_sec_vma_array_name("__g_data_sec_vma_array"),
       data_sec_size_array_name("__g_data_sec_size_array"),
       data_sec_bytes_array_name("__g_data_sec_bytes_ptr_array"),
-      data_sec_num_name("__g_data_sec_num") {
+      data_sec_num_name("__g_data_sec_num"),
+      e_phent_name("__g_e_phent"),
+      e_phnum_name("__g_e_phnum"),
+      e_ph_name("__g_e_ph"),
+      g_platform_name("__g_platform_name"),
+      g_addr_list_name("__g_fn_vmas"),
+      g_fun_ptr_table_name("__g_fn_ptr_table"),
+      debug_state_machine_name("debug_state_machine"),
+      debug_pc_name("debug_pc") {
 
   inst_bytes.reserve(max_inst_bytes);
 }
@@ -244,7 +279,7 @@ llvm::GlobalVariable *TraceLifter::Impl::SetEntryPoint(std::string &entry_func_n
     
   auto entry_func = module->getFunction(entry_func_name);
   // no defined entry function
-  if (!func) {
+  if (!entry_func) {
     printf("[ERROR] Entry function is not defined. func_name: %s\n", entry_func_name.c_str());
     abort();
   }
@@ -323,7 +358,7 @@ llvm::Function *TraceLifter::Impl::GetDefinedFunction(std::string fun_name, std:
   if (LLVMFunTypeIdent::NULL_FUN_TY == llvm_fn_ty_id) {
     callee_fun = module->getFunction(callee_fun_name);
     if (!callee_fun) {
-      printf("[ERROR] No defined function is pre-referenced.\n");
+      printf("[ERROR] No defined function (%s) is pre-referenced.\n", callee_fun_name.c_str());
       abort();
     }
   } else {
@@ -331,7 +366,6 @@ llvm::Function *TraceLifter::Impl::GetDefinedFunction(std::string fun_name, std:
       module->getOrInsertFunction(callee_fun_name, arch->LiftedFunctionType()).getCallee()
     );
     callee_fun->setLinkage(llvm::GlobalVariable::ExternalLinkage);
-    // callee_fun->setAlignment(llvm::Align(8));
   }
   
   return callee_fun;
@@ -390,7 +424,7 @@ llvm::GlobalVariable *TraceLifter::Impl::SetDataSections(std::vector<BinaryLoade
     auto __sec_bytes = new llvm::GlobalVariable(
       *module,
       sec_bytes_val->getType(),
-      true,
+      false,
       llvm::GlobalVariable::ExternalLinkage,
       sec_bytes_val,
       "__private_" + section.sec_name + "_bytes"
@@ -456,6 +490,123 @@ llvm::GlobalVariable *TraceLifter::Impl::SetDataSections(std::vector<BinaryLoade
   return g_data_sec_name_array;
 }
 
+llvm::GlobalVariable *TraceLifter::Impl::SetELFPhdr(uint64_t e_phent, uint64_t e_phnum, uint8_t *e_ph) {
+  
+  /* Define e_phent */
+  new llvm::GlobalVariable(
+    *module,
+    llvm::Type::getInt64Ty(context),
+    true,
+    llvm::GlobalVariable::ExternalLinkage,
+    llvm::ConstantInt::get(llvm::Type::getInt64Ty(context), e_phent),
+    e_phent_name
+  );
+  /* Define e_phnum */
+  new llvm::GlobalVariable(
+    *module,
+    llvm::Type::getInt64Ty(context),
+    true,
+    llvm::GlobalVariable::ExternalLinkage,
+    llvm::ConstantInt::get(llvm::Type::getInt64Ty(context), e_phnum),
+    e_phnum_name
+  );
+  /* Define e_ph */
+  auto e_phdrs_size = e_phent * e_phnum;
+  auto e_ph_constants = llvm::ConstantDataArray::get(context, llvm::ArrayRef<uint8_t>(e_ph, e_phdrs_size));
+  auto g_e_ph = new llvm::GlobalVariable(
+    *module,
+    e_ph_constants->getType(),
+    false,
+    llvm::GlobalVariable::ExternalLinkage,
+    e_ph_constants,
+    e_ph_name
+  );
+  g_e_ph->setUnnamedAddr(llvm::GlobalVariable::UnnamedAddr::Global);
+  g_e_ph->setAlignment(llvm::Align(1));
+
+  return g_e_ph;
+}
+
+llvm::GlobalVariable *TraceLifter::Impl::SetPlatform(const char *platform_name) {
+  auto platform_name_val = llvm::ConstantDataArray::getString(context, platform_name, true);
+  return new llvm::GlobalVariable(
+    *module,
+    platform_name_val->getType(),
+    true,
+    llvm::GlobalVariable::ExternalLinkage,
+    platform_name_val,
+    g_platform_name
+  );
+}
+
+/* Set lifted function pointer table */
+llvm::GlobalVariable *TraceLifter::Impl::SetLiftedFunPtrTable(std::unordered_map<uint64_t, const char *> &addr_fn_map) {
+  
+  std::vector<llvm::Constant*> addr_list, fn_ptr_list;
+
+  for (auto& [addr, fn_name] : addr_fn_map) {
+    auto lifted_fun = module->getFunction(fn_name);
+    if (!lifted_fun) {
+      printf("[ERROR] lifted fun \"%s\" cannot be found.\n", fn_name);
+      abort();
+    }
+    addr_list.push_back(llvm::ConstantInt::get(llvm::Type::getInt64Ty(context), addr));
+    fn_ptr_list.push_back(lifted_fun);
+  }
+  /* insert guard */
+  addr_list.push_back(llvm::ConstantInt::get(llvm::Type::getInt64Ty(context), 0));
+  /* define global fn ptr table */
+  auto addr_list_type = llvm::ArrayType::get(llvm::Type::getInt64Ty(context), addr_list.size());
+  auto fn_ptr_list_type = llvm::ArrayType::get(fn_ptr_list[0]->getType(), fn_ptr_list.size());
+  new llvm::GlobalVariable(
+    *module,
+    addr_list_type,
+    true,
+    llvm::GlobalVariable::ExternalLinkage,
+    llvm::ConstantArray::get(addr_list_type, addr_list),
+    g_addr_list_name
+  );
+  return new llvm::GlobalVariable(
+    *module,
+    fn_ptr_list_type,
+    true,
+    llvm::GlobalVariable::ExternalLinkage,
+    llvm::ConstantArray::get(fn_ptr_list_type, fn_ptr_list),
+    g_fun_ptr_table_name
+  );
+}
+
+/* Set control flow debug list */
+void TraceLifter::Impl::SetControlFlowDebugList(std::unordered_map<uint64_t, bool> &__control_flow_debug_list) {
+  control_flow_debug_list = __control_flow_debug_list;
+}
+
+llvm::Function *TraceLifter::Impl::DeclareDebugStateMachine() {
+  return llvm::Function::Create(
+    llvm::FunctionType::get(
+      llvm::Type::getVoidTy(context),
+      {},
+      false
+    ),
+    llvm::Function::ExternalLinkage,
+    debug_state_machine_name,
+    *module
+  );
+}
+
+llvm::Function *TraceLifter::Impl::DeclareDebugPC() {
+  return llvm::Function::Create(
+    llvm::FunctionType::get(
+      llvm::Type::getVoidTy(context),
+      {},
+      false
+    ),
+    llvm::Function::ExternalLinkage,
+    debug_pc_name,
+    *module
+  );
+}
+
 TraceLifter::~TraceLifter(void) {}
 
 TraceLifter::TraceLifter(const Arch *arch_, TraceManager *manager_)
@@ -473,6 +624,7 @@ bool TraceLifter::Impl::ReadInstructionBytes(uint64_t addr) {
     }
     uint8_t byte = 0;
     if (!manager.TryReadExecutableByte(byte_addr, &byte)) {
+      printf("[WARNING] Couldn't read executable byte at 0x%llx\n", byte_addr);
       DLOG(WARNING) << "Couldn't read executable byte at " << std::hex
                     << byte_addr << std::dec;
       break;
@@ -484,8 +636,8 @@ bool TraceLifter::Impl::ReadInstructionBytes(uint64_t addr) {
 
 // Lift one or more traces starting from `addr`.
 bool TraceLifter::Lift(
-    uint64_t addr, std::function<void(uint64_t, llvm::Function *)> callback) {
-  return impl->Lift(addr, callback);
+    uint64_t addr, const char* fn_name, std::function<void(uint64_t, llvm::Function *)> callback) {
+  return impl->Lift(addr, fn_name, callback);
 }
 
 // Set entry function pointer
@@ -503,13 +655,44 @@ void TraceLifter::DefinePreReferedFunction(std::string sub_func_name, std::strin
   impl->DefinePreReferedFunction(sub_func_name, lifted_func_name, llvm_fn_ty_id);
 }
 
+// Set every data sections of the original ELF to LLVM bitcode
 void TraceLifter::SetDataSections(std::vector<BinaryLoader::ELFSection> &sections) {
   impl->SetDataSections(sections);
 }
 
+/* Set ELF program header info */
+void TraceLifter::SetELFPhdr(uint64_t e_phent, uint64_t e_phnum, uint8_t *e_ph) {
+  impl->SetELFPhdr(e_phent, e_phnum, e_ph);
+}
+
+/* Set Platform name */
+void TraceLifter::SetPlatform(const char* platform_name) {
+  impl->SetPlatform(platform_name);
+}
+
+/* Set lifted function pointer table */
+void TraceLifter::SetLiftedFunPtrTable(std::unordered_map<uint64_t, const char *> &addr_fn_map) {
+  impl->SetLiftedFunPtrTable(addr_fn_map);
+}
+
+/* Set Control Flow debug list */
+void TraceLifter::SetControlFlowDebugList(std::unordered_map<uint64_t, bool> &__control_flow_debug_list) {
+  impl->SetControlFlowDebugList(__control_flow_debug_list);
+}
+
+// Declare debug_state_machine function
+void TraceLifter::DeclareDebugStateMachine() {
+  impl->DeclareDebugStateMachine();
+}
+
+/* Declare debug_pc function */
+void TraceLifter::DeclareDebugPC() {
+  impl->DeclareDebugPC();
+}
+
 // Lift one or more traces starting from `addr`.
 bool TraceLifter::Impl::Lift(
-    uint64_t addr, std::function<void(uint64_t, llvm::Function *)> callback) {
+    uint64_t addr, const char *fn_name, std::function<void(uint64_t, llvm::Function *)> callback) {
   // Reset the lifting state.
   trace_work_list.clear();
   inst_work_list.clear();
@@ -524,8 +707,8 @@ bool TraceLifter::Impl::Lift(
   // Get a trace head that the manager knows about, or that we
   // will eventually tell the trace manager about.
   auto get_trace_decl = [=](uint64_t trace_addr) -> llvm::Function * {
-    if (auto trace = GetLiftedTraceDeclaration(trace_addr)) {
-      return trace;
+    if (auto lifted_fn = GetLiftedTraceDeclaration(trace_addr)) {
+      return lifted_fn;
     } else if (trace_work_list.count(trace_addr)) {
       auto sub_fn_name = manager.TraceName(trace_addr);
       llvm::Function* sub_fn;
@@ -542,9 +725,7 @@ bool TraceLifter::Impl::Lift(
 
   trace_work_list.insert(addr);
   while (!trace_work_list.empty()) {
-    /*mss
-      prepare definition of pc, state, etc...
-    */
+
     const auto trace_addr = PopTraceAddress();
 
     // Already lifted.
@@ -559,11 +740,13 @@ bool TraceLifter::Impl::Lift(
     func = get_trace_decl(trace_addr);
     blocks.clear();
 
+
     if (!func || !func->isDeclaration()) {
       func = arch->DeclareLiftedFunction(manager.TraceName(trace_addr), module);
     }
 
     CHECK(func->isDeclaration());
+
 
     // Fill in the function, and make sure the block with all register
     // variables jumps to the block that will contain the first instruction
@@ -588,10 +771,11 @@ bool TraceLifter::Impl::Lift(
     CHECK(inst_work_list.empty());
     inst_work_list.insert(trace_addr);
 
-    // Decode instructions.
-    /*mss
-      decode every instructions of target function.
-    */
+    // if (0x0041ce80 == trace_addr) {
+    //   printf("%lx entry!\n", trace_addr);
+    // }
+
+    // Decode instructions. 
     while (!inst_work_list.empty()) {
       const auto inst_addr = PopInstructionAddress();
 
@@ -621,9 +805,13 @@ bool TraceLifter::Impl::Lift(
 
       inst.Reset();
 
+
       // TODO(Ian): not passing context around in trace lifter
-      std::ignore = arch->DecodeInstruction(inst_addr, inst_bytes, inst,
-                                            this->arch->CreateInitialContext());
+      std::ignore = arch->DecodeInstruction(inst_addr, inst_bytes, inst, this->arch->CreateInitialContext());
+
+      if (0x41cf90 == inst.pc) {
+        printf("%ld Entry!\n", inst.pc);
+      }
 
       auto lift_status =
           inst.GetLifter()->LiftIntoBlock(inst, block, state_ptr);
@@ -631,7 +819,19 @@ bool TraceLifter::Impl::Lift(
         AddTerminatingTailCall(block, intrinsics->error, *intrinsics);
         continue;
       }
-
+#if defined(LIFT_DEBUG)
+      /* append debug pc function */
+      if (control_flow_debug_list.contains(trace_addr) && control_flow_debug_list[trace_addr]) {
+        llvm::IRBuilder<> __builder(block);
+        auto _debug_pc_fn = module->getFunction(debug_pc_name);
+        if (!_debug_pc_fn) {
+          printf("[ERROR] debug_pc is undeclared.\n");
+          abort();
+        }
+        printf("0x%llx\n", trace_addr);
+        __builder.CreateCall(_debug_pc_fn);
+      }
+#endif
       // Handle lifting a delayed instruction.
       auto try_delay = arch->MayHaveDelaySlot(inst);
       if (try_delay) {

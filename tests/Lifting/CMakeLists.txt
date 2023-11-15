@@ -40,6 +40,7 @@ target_link_libraries(
   lifting_target_aarch64 
   PRIVATE
   bfd
+  elf
 )
 
 file(GLOB AARCH64_TEST_FILES

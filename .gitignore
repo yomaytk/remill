@@ -100,3 +100,5 @@ obj-intel64/*
 
 #VERSION files from CI
 VERSION
+
+examples/w2c

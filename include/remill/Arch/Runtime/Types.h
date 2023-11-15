@@ -56,7 +56,7 @@ typedef int16_t addr_diff_t;
 #endif
 
 // Entry function of the original ELF
-typedef unsigned long (*EntryFunc)(State *state, addr_t pc, Memory *memory);
+typedef unsigned long (*LiftedFunc)(State *state, addr_t pc, Memory *memory);
 
 // Note: We are re-defining the `std::is_signed` type trait because we can't
 //       always explicitly specialize it inside of the `std` namespace.
@@ -119,6 +119,8 @@ union vec128_t;
 union vec256_t;
 union vec512_t;
 
+// MAKE_VECTOR(uint128_t, uint128, 4, 512, 64)
+// MAKE_VECTOR(uint16_t, uint16, 8, 128, 16)
 #define MAKE_VECTOR(base_type, prefix, nelems, vec_size_bits, width_bytes) \
   struct prefix##v##nelems##_t final { \
     base_type elems[nelems]; \
