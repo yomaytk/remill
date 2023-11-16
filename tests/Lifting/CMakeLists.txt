@@ -73,3 +73,7 @@ add_custom_command(
 
 message(STATUS "Adding New Target aarch64 as only liftin_target_aarch64: aarch64 as run-aarch64-tests")
 add_dependencies(test_dependencies lifting_target_aarch64)
+
+file(WRITE path_log.txt ${PROJECT_LIBRARIES})
+file(APPEND path_log.txt ${PROJECT_INCLUDEDIRECTORIES})
+file(APPEND path_log.txt ${CMAKE_SOURCE_DIR})

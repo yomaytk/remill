@@ -41,6 +41,8 @@ tools/remill_disass.egg-info/*
 tools/remill_disass/CFG.proto
 tools/remill_disass/CFG_pb2.py
 
+lifting-bits-downloads
+
 dist/*
 remill_disass.egg-info/*
 

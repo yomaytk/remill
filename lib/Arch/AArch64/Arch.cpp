@@ -817,10 +817,6 @@ bool AArch64Arch::ArchDecodeInstruction(uint64_t address,
   inst.next_pc = address + kInstructionSize;
   inst.category = Instruction::kCategoryInvalid;
 
-  if (0x41cf90 == inst.pc) {
-    printf("%ld Entry!\n", inst.pc);
-  }
-
   if (kInstructionSize != inst_bytes.size()) {
     inst.category = Instruction::kCategoryInvalid;
     return false;

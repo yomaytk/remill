@@ -19,10 +19,10 @@
 
 SCRIPTS_DIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
 SRC_DIR=$( cd "$( dirname "${SCRIPTS_DIR}" )" && pwd )
-DOWNLOAD_DIR="$( cd "$( dirname "${SRC_DIR}" )" && pwd )/lifting-bits-downloads"
+DOWNLOAD_DIR="$( cd "${SRC_DIR}" && pwd )/lifting-bits-downloads"
 CURR_DIR=$( pwd )
 BUILD_DIR="${CURR_DIR}/build"
-INSTALL_DIR={$HOME}/local
+INSTALL_DIR="$HOME"
 LLVM_VERSION=llvm-16
 OS_VERSION=
 ARCH_VERSION=
@@ -420,7 +420,7 @@ function main
   mkdir -p "${BUILD_DIR}"
   cd "${BUILD_DIR}" || exit 1
 
-  if ! (DownloadLibraries && Configure && Build && Package ); then
+  if ! (DownloadLibraries && Configure && Build); then
     echo "[x] Build aborted."
     exit 1
   fi

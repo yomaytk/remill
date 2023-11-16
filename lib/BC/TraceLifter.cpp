@@ -809,9 +809,9 @@ bool TraceLifter::Impl::Lift(
       // TODO(Ian): not passing context around in trace lifter
       std::ignore = arch->DecodeInstruction(inst_addr, inst_bytes, inst, this->arch->CreateInitialContext());
 
-      if (0x41cf90 == inst.pc) {
-        printf("%ld Entry!\n", inst.pc);
-      }
+      // if (0x41cf90 == inst.pc) {
+      //   printf("%ld Entry!\n", inst.pc);
+      // }
 
       auto lift_status =
           inst.GetLifter()->LiftIntoBlock(inst, block, state_ptr);
