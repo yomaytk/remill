@@ -78,6 +78,22 @@ DEF_SEM(MOVxPD, D dst, S src) {
   return memory;
 }
 
+// MOVMSKPS: extract sign bits (bit 31) of 4 single-precision floats into GPR32
+template <typename D, typename S>
+DEF_SEM(MOVMSKPS, D dst, S src) {
+  auto src_vec = UReadV32(src);
+  auto s0 = UExtractV32(src_vec, 0);
+  auto s1 = UExtractV32(src_vec, 1);
+  auto s2 = UExtractV32(src_vec, 2);
+  auto s3 = UExtractV32(src_vec, 3);
+  auto r32 = UOr(
+      UOr(UOr(UShr(s0, 31_u32), UShl(UShr(s1, 31_u32), 1_u32)),
+          UShl(UShr(s2, 31_u32), 2_u32)),
+      UShl(UShr(s3, 31_u32), 3_u32));
+  WriteZExt(dst, r32);
+  return memory;
+}
+
 template <typename D, typename S>
 DEF_SEM(MOVDQx, D dst, S src) {
   UWriteV128(dst, UReadV128(src));
@@ -485,6 +501,8 @@ IF_AVX(DEF_ISEL(VMOVHLPS_XMMdq_XMMdq_XMMdq) = VMOVHLPS;)
 DEF_ISEL(MOVLHPS_XMMq_XMMq) = MOVLHPS;
 IF_AVX(DEF_ISEL(VMOVLHPS_XMMdq_XMMq_XMMq) = VMOVLHPS;)
 IF_AVX(DEF_ISEL(VMOVLHPS_XMMdq_XMMdq_XMMdq) = VMOVLHPS;)
+
+DEF_ISEL(MOVMSKPS_GPR32_XMMps) = MOVMSKPS<R32W, V128>;
 
 #if HAS_FEATURE_AVX
 #  if HAS_FEATURE_AVX512
